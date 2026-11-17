@@ -1,0 +1,89 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+.env.production
+.env.staging
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+.venv/
+env/
+ENV/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+*.egg-info/
+.eggs/
+build/
+dist/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Node.js
+node_modules/
+.next/
+.nuxt/
+.svelte-kit/
+.astro/
+out/
+.turbo/
+.parcel-cache/
+.vercel/
+.netlify/
+coverage/
+.nyc_output/
+playwright-report/
+
+# Rust / Go / Java
+target/
+vendor/
+.gradle/
+gradle/
+*.class
+*.jar
+
+# IDE
+.vscode/
+.idea/
+.fleet/
+.nova/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Media (uncomment for projects with assets)
+# *.png
+# *.jpg
+# *.mp4
+# *.mp3
+# *.wav
+
+# Temp export script and Makefile (personal use for AI context)
+export.py
+project_export.md
+project_export.txt
+exports/
+Makefile
+
+# Logs
+*.log
+logs/
+
+# Backups
+backups/
+*.bak
+*.tmp

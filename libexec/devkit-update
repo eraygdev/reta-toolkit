@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Pull latest dev-kit changes and reinstall.
+# group: Setup
+set -euo pipefail
+
+cd "$HOME/.dev-kit"
+echo "Pulling from origin..."
+git pull --rebase
+echo "Re-running installer..."
+"$HOME/.dev-kit/install.sh"

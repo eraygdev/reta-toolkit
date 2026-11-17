@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Copy dev-kit project templates into the current directory.
+# group: Setup
+set -euo pipefail
+
+TEMPLATES="$HOME/.dev-kit/templates"
+TARGET_DIR="${1:-.}"
+if [ ! -d "$TARGET_DIR" ]; then
+    echo "Error: target directory does not exist: $TARGET_DIR"
+    exit 1
+fi
+TARGET_DIR="$(cd "$TARGET_DIR" && pwd)"
+
+echo "devkit init"
+echo "Target: $TARGET_DIR"
+echo ""
+
+shopt -s dotglob nullglob
+copied=0; skipped=0
+for src in "$TEMPLATES"/*; do
+    name="$(basename "$src")"
+    dst="$TARGET_DIR/$name"
+    if [ -e "$dst" ]; then
+        echo "  skip  $name (exists)"
+        skipped=$((skipped+1))
+    else
+        cp -r "$src" "$dst"
+        echo "  ok    $name"
+        copied=$((copied+1))
+    fi
+done
+shopt -u dotglob nullglob
+
+echo ""
+echo "Done: $copied copied, $skipped skipped."

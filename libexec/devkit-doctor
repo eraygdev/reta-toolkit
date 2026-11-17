@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Check dev-kit installation health.
+# group: Diagnostics
+set -uo pipefail
+shopt -s nullglob
+
+DEVKIT_ROOT="$HOME/.dev-kit"
+TARGET="$HOME/.local/bin"
+
+ok=0
+warn=0
+fail=0
+
+check_ok()   { echo "  OK    $1"; ok=$((ok+1)); }
+check_warn() { echo "  WARN  $1"; warn=$((warn+1)); }
+check_fail() { echo "  FAIL  $1"; fail=$((fail+1)); }
+
+echo "devkit doctor"
+echo ""
+
+echo "Symlinks:"
+if [ -L "$HOME/.dev-kit" ] && [ -e "$HOME/.dev-kit" ]; then
+    check_ok "~/.dev-kit -> $(readlink "$HOME/.dev-kit")"
+elif [ -e "$HOME/.dev-kit" ]; then
+    check_warn "~/.dev-kit exists but is not a symlink"
+else
+    check_fail "~/.dev-kit missing (run install.sh)"
+fi
+
+if [ -L "$TARGET/devkit" ] && [ -x "$TARGET/devkit" ]; then
+    check_ok "~/.local/bin/devkit -> $(readlink "$TARGET/devkit")"
+else
+    check_fail "~/.local/bin/devkit missing or not executable"
+fi
+
+echo ""
+echo "Files:"
+[ -f "$DEVKIT_ROOT/VERSION" ] && check_ok "VERSION ($(cat "$DEVKIT_ROOT/VERSION"))" || check_fail "VERSION missing"
+[ -f "$DEVKIT_ROOT/lib/base.mk" ] && check_ok "lib/base.mk" || check_fail "lib/base.mk missing"
+[ -x "$DEVKIT_ROOT/lib/export-context" ] && check_ok "lib/export-context (executable)" || check_warn "lib/export-context not executable"
+
+echo ""
+echo "Subcommands:"
+if [ -d "$DEVKIT_ROOT/libexec" ]; then
+    for f in "$DEVKIT_ROOT/libexec"/devkit-*; do
+        name="$(basename "$f")"
+        if [ -x "$f" ]; then
+            check_ok "$name"
+        else
+            check_warn "$name (not executable)"
+        fi
+    done
+else
+    check_fail "libexec/ missing"
+fi
+
+echo ""
+echo "Environment:"
+case ":$PATH:" in
+    *":$TARGET:"*) check_ok "$TARGET is on PATH" ;;
+    *) check_fail "$TARGET is not on PATH" ;;
+esac
+
+command -v docker >/dev/null 2>&1 && check_ok "docker available" || check_warn "docker not found (make up/down won't work)"
+command -v git    >/dev/null 2>&1 && check_ok "git available"    || check_fail "git not found"
+
+echo ""
+echo "Summary: $ok OK, $warn WARN, $fail FAIL"
+[ $fail -eq 0 ] || exit 1
