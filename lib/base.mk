@@ -1,9 +1,9 @@
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
 # ═══════════════════════════════════════════════════════════
-# dev-kit / lib/base.mk
+# reta / lib/base.mk
 # Shared make targets for all projects.
-# Path: ~/.dev-kit/lib/base.mk
+# Path: ~/.reta/lib/base.mk
 # ═══════════════════════════════════════════════════════════
 
 SHELL := /bin/bash
@@ -24,7 +24,7 @@ help:  ## Show all targets (base + project)
 	  } \
 	  /^[a-zA-Z_-]+:.*?## / { \
 	    printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 \
-	  }' $(HOME)/.dev-kit/lib/base.mk
+	  }' $(HOME)/.reta/lib/base.mk
 	@proj=$$(awk 'BEGIN {FS = ":.*?## "} \
 	  /^# === / { \
 	    line = $$0; \
@@ -57,7 +57,7 @@ help-base:  ## Show only base targets
 	  } \
 	  /^[a-zA-Z_-]+:.*?## / { \
 	    printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 \
-	  }' $(HOME)/.dev-kit/lib/base.mk
+	  }' $(HOME)/.reta/lib/base.mk
 
 help-project:  ## Show only project-specific targets
 	@echo "Project-specific targets:"
@@ -139,11 +139,11 @@ clean-docker:  ## Safe docker prune (volumes preserved)
 # === Export ===
 
 export:  ## Export source for AI context
-	@if [ ! -x "$(HOME)/.dev-kit/lib/export-context" ]; then \
-		echo "Error: export-context not found at ~/.dev-kit/lib/export-context"; \
+	@if [ ! -x "$(HOME)/.reta/lib/export-context" ]; then \
+		echo "Error: export-context not found at ~/.reta/lib/export-context"; \
 		exit 1; \
 	fi
-	@$(HOME)/.dev-kit/lib/export-context
+	@$(HOME)/.reta/lib/export-context
 
 clean-export:  ## Remove old export and regenerate
 	@rm -f project_export.md exports/project_export.md

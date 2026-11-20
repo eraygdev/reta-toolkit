@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# devkit — personal dev toolkit dispatcher
+# reta — personal dev toolkit dispatcher
 set -euo pipefail
 shopt -s nullglob
 
-DEVKIT_ROOT="$HOME/.dev-kit"
-DEVKIT_LIBEXEC="$DEVKIT_ROOT/libexec"
+RETA_ROOT="$HOME/.reta"
+RETA_LIBEXEC="$RETA_ROOT/libexec"
 
 BOLD='\033[1m'
 DIM='\033[2m'
@@ -13,7 +13,7 @@ YELLOW='\033[1;33m'
 MAGENTA='\033[1;35m'
 RESET='\033[0m'
 
-version="$(cat "$DEVKIT_ROOT/VERSION" 2>/dev/null || echo "unknown")"
+version="$(cat "$RETA_ROOT/VERSION" 2>/dev/null || echo "unknown")"
 
 cmd="${1:-help}"
 shift || true
@@ -21,15 +21,15 @@ shift || true
 case "$cmd" in
     help|--help|-h|"")
         printf "\n"
-        printf "  ${MAGENTA}${BOLD}devkit${RESET} ${DIM}v%s${RESET} — personal dev toolkit\n" "$version"
+        printf "  ${MAGENTA}${BOLD}reta${RESET} ${DIM}v%s${RESET} — personal dev toolkit\n" "$version"
         printf "  ${DIM}────────────────────────────────────────${RESET}\n"
         printf "\n"
-        printf "  ${DIM}Usage:${RESET} ${BOLD}devkit${RESET} <command> [args...]\n"
+        printf "  ${DIM}Usage:${RESET} ${BOLD}reta${RESET} <command> [args...]\n"
 
-        if [ -d "$DEVKIT_LIBEXEC" ]; then
+        if [ -d "$RETA_LIBEXEC" ]; then
             # First pass: collect unique group names in order of appearance
             groups=()
-            for f in "$DEVKIT_LIBEXEC"/devkit-*; do
+            for f in "$RETA_LIBEXEC"/reta-*; do
                 [ -x "$f" ] || continue
                 g="$(sed -n '3s/^# group: //p' "$f")"
                 [ -z "$g" ] && g="Commands"
@@ -44,13 +44,13 @@ case "$cmd" in
             for g in "${groups[@]}"; do
                 printf "\n"
                 printf "  ${YELLOW}%s${RESET}\n" "$g"
-                for f in "$DEVKIT_LIBEXEC"/devkit-*; do
+                for f in "$RETA_LIBEXEC"/reta-*; do
                     [ -x "$f" ] || continue
                     fg="$(sed -n '3s/^# group: //p' "$f")"
                     [ -z "$fg" ] && fg="Commands"
                     [ "$fg" != "$g" ] && continue
                     name="$(basename "$f")"
-                    name="${name#devkit-}"
+                    name="${name#reta-}"
                     desc="$(sed -n '2s/^# //p' "$f")"
                     [ -z "$desc" ] && desc="(no description)"
                     printf "  ${CYAN}%-15s${RESET} %s\n" "$name" "$desc"
@@ -63,7 +63,7 @@ case "$cmd" in
         fi
 
         printf "\n"
-        printf "  ${DIM}Run 'devkit <command>' to execute.${RESET}\n"
+        printf "  ${DIM}Run 'reta <command>' to execute.${RESET}\n"
         printf "\n"
         exit 0
         ;;
@@ -73,11 +73,11 @@ case "$cmd" in
         ;;
 esac
 
-sub="$DEVKIT_LIBEXEC/devkit-$cmd"
+sub="$RETA_LIBEXEC/reta-$cmd"
 if [ -x "$sub" ]; then
     exec "$sub" "$@"
 fi
 
-echo "devkit: unknown command '$cmd'"
-echo "Try: devkit help"
+echo "reta: unknown command '$cmd'"
+echo "Try: reta help"
 exit 1

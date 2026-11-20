@@ -49,7 +49,7 @@ AI INSTRUCTIONS — read before filling this template:
 
 - [PREREQUISITE_1 — e.g. Python 3.11+]
 - [PREREQUISITE_2 — e.g. Docker]
-- [PREREQUISITE_3 — e.g. devkit]
+- [PREREQUISITE_3 — e.g. reta]
 
 ### Installation
 
@@ -60,7 +60,7 @@ cd [REPO_NAME]
 
 # Environment
 cp .env.example .env
-# Edit .env with your values (or run: devkit init-env)
+# Edit .env with your values (or run: reta init-env)
 
 # Install dependencies
 [INSTALL_COMMAND — e.g. make install]

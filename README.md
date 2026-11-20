@@ -1,4 +1,4 @@
-# devkit
+# reta
 
 > Personal developer toolkit for scaffolding projects, managing secrets, and automating shared workflows.
 
@@ -11,18 +11,18 @@
 
 ## Overview
 
-`devkit` is a single-command toolkit that bundles the small, repetitive tasks every project needs: scaffolding a new repo with consistent structure, generating `.env` files with auto-filled secrets, sharing a common set of `make` targets across projects, and killing zombie processes on local ports.
+`reta` is a single-command toolkit that bundles the small, repetitive tasks every project needs: scaffolding a new repo with consistent structure, generating `.env` files with auto-filled secrets, sharing a common set of `make` targets across projects, and killing zombie processes on local ports.
 
-Unlike full dotfiles managers (chezmoi, yadm), `devkit` focuses on **project-level tooling** — what happens inside each repo — rather than managing `$HOME` itself. Every project includes the same `~/.dev-kit/lib/base.mk`, so improvements to the shared toolkit propagate everywhere without touching individual projects.
+Unlike full dotfiles managers (chezmoi, yadm), `reta` focuses on **project-level tooling** — what happens inside each repo — rather than managing `$HOME` itself. Every project includes the same `~/.reta/lib/base.mk`, so improvements to the shared toolkit propagate everywhere without touching individual projects.
 
 ## Features
 
-- **Subcommand dispatcher** — a single `devkit` command routes to `libexec/devkit-*` scripts; new subcommands appear automatically in `devkit help`
-- **Project scaffolding** — `devkit init` copies templates (`Makefile`, `.env.example`, `.gitignore`, `README.md`) into the current directory without overwriting existing files
-- **Secret generation** — `devkit init-env` reads `.env.example`, replaces `GENERATE_SECRET` / `AUTO_HASH` markers with real values, and prompts for missing keys
+- **Subcommand dispatcher** — a single `reta` command routes to `libexec/reta-*` scripts; new subcommands appear automatically in `reta help`
+- **Project scaffolding** — `reta init` copies templates (`Makefile`, `.env.example`, `.gitignore`, `README.md`) into the current directory without overwriting existing files
+- **Secret generation** — `reta init-env` reads `.env.example`, replaces `GENERATE_SECRET` / `AUTO_HASH` markers with real values, and prompts for missing keys
 - **Shared make targets** — `lib/base.mk` is `include`d by every project, giving them `up`, `down`, `logs`, `clean`, `git-sync`, `export`, and more
-- **Installation health check** — `devkit doctor` verifies symlinks, file permissions, `PATH`, and dependencies
-- **Port killer** — `devkit killport` lists listening ports interactively (via `fzf` or a numbered menu) and terminates the chosen process with SIGTERM, escalating to SIGKILL if needed
+- **Installation health check** — `reta doctor` verifies symlinks, file permissions, `PATH`, and dependencies
+- **Port killer** — `reta killport` lists listening ports interactively (via `fzf` or a numbered menu) and terminates the chosen process with SIGTERM, escalating to SIGKILL if needed
 
 ## Tech Stack
 
@@ -41,18 +41,29 @@ Unlike full dotfiles managers (chezmoi, yadm), `devkit` focuses on **project-lev
 - Python 3.10+
 - GNU Make
 - Git
-- `lsof` (for `devkit killport`)
-- `fzf` (optional, improves `devkit killport`)
+- `lsof` (for `reta killport`)
+- `fzf` (optional, improves `reta killport`)
 - Docker (optional, only if projects use `make up`)
 
 ### Installation
 
+**Quick install (single command):**
+
 ```bash
-git clone https://github.com/[GITHUB_USERNAME]/devkit.git ~/Masaüstü/dev-kit
-cd ~/Masaüstü/dev-kit
-chmod +x install.sh
+git clone https://github.com/eraygdev/reta-toolkit.git ~/.reta && cd ~/.reta && ./install.sh
+```
+
+**Or step by step:**
+
+```bash
+git clone https://github.com/eraygdev/reta-toolkit.git ~/.reta
+cd ~/.reta
 ./install.sh
 ```
+
+> **Important:** The `~/.reta` target is required. `install.sh` installs the
+> toolkit by symlinking `~/.local/bin/reta` to it — if you clone somewhere else,
+> `reta` will break whenever that source folder moves or is deleted.
 
 If `install.sh` reports that `~/.local/bin` is not on `PATH`, add it to your shell config:
 
@@ -64,7 +75,7 @@ source ~/.bashrc
 Verify the installation:
 
 ```bash
-devkit doctor
+reta doctor
 ```
 
 ## Usage
@@ -72,23 +83,23 @@ devkit doctor
 ### Command overview
 
 ```bash
-devkit help          # List all subcommands, grouped
-devkit --version     # Show current version
+reta help          # List all subcommands, grouped
+reta --version     # Show current version
 ```
 
 ### Scaffold a new project
 
 ```bash
 mkdir my-new-project && cd my-new-project
-devkit init          # Copies Makefile, .env.example, .gitignore, README.md
-devkit init-env      # Generates .env from .env.example
-make help            # Base targets now available
+reta init          # Copies Makefile, .env.example, .gitignore, README.md
+reta init-env      # Generates .env from .env.example
+make help          # Base targets now available
 ```
 
 ### Manage running ports
 
 ```bash
-devkit killport
+reta killport
 # ? Select a port to kill:
 #   8001  python3     PID=12345  *:8001
 #   5432  postgres    PID=67890  127.0.0.1:5432
@@ -97,29 +108,30 @@ devkit killport
 ### Update the toolkit
 
 ```bash
-devkit update        # git pull + rerun install.sh
+reta update        # git pull + rerun install.sh
 ```
 
 ## Project Structure
 
 ```text
-devkit/
-├── bin/devkit              # Dispatcher — the only command on PATH
+reta-toolkit/
+├── bin/reta                # Dispatcher — the only command on PATH
 ├── lib/
 │   ├── base.mk             # Shared make targets (included by every project)
 │   └── export-context      # Source export for AI context
 ├── libexec/                # Subcommands (not on PATH)
-│   ├── devkit-init
-│   ├── devkit-init-env
-│   ├── devkit-killport
-│   ├── devkit-doctor
-│   └── devkit-update
+│   ├── reta-init
+│   ├── reta-init-env
+│   ├── reta-killport
+│   ├── reta-doctor
+│   ├── reta-update
+│   └── reta-uninstall
 ├── templates/              # Files copied into new projects
 │   ├── Makefile
 │   ├── .env.example
 │   ├── .gitignore
 │   └── README.md
-├── install.sh              # Symlinks ~/.dev-kit and ~/.local/bin/devkit
+├── install.sh              # Symlinks ~/.reta and ~/.local/bin/reta
 ├── VERSION
 └── README.md               # You are here
 ```
@@ -130,32 +142,32 @@ After editing a subcommand or `libexec` script, re-run `install.sh` to refresh e
 
 ```bash
 ./install.sh
-devkit doctor
+reta doctor
 ```
 
 To test changes without touching your real projects:
 
 ```bash
-rm -rf /tmp/devkit-test && mkdir /tmp/devkit-test && cd /tmp/devkit-test
-devkit init
+rm -rf /tmp/reta-test && mkdir /tmp/reta-test && cd /tmp/reta-test
+reta init
 make help
 ```
 
 ## Testing
 
-TBD — there is no automated test suite yet. Manual verification via `devkit doctor` and a fresh `/tmp` project is the current baseline.
+TBD — there is no automated test suite yet. Manual verification via `reta doctor` and a fresh `/tmp` project is the current baseline.
 
 ## Roadmap
 
-- [x] Subcommand dispatcher (`devkit <cmd>`)
-- [x] Project scaffolding (`devkit init`)
-- [x] `.env` generation (`devkit init-env`)
-- [x] Port killer (`devkit killport`)
-- [x] Installation health check (`devkit doctor`)
-- [x] Self-update (`devkit update`)
+- [x] Subcommand dispatcher (`reta <cmd>`)
+- [x] Project scaffolding (`reta init`)
+- [x] `.env` generation (`reta init-env`)
+- [x] Port killer (`reta killport`)
+- [x] Installation health check (`reta doctor`)
+- [x] Self-update (`reta update`)
 - [ ] Shell completion for bash and zsh
 - [ ] Automated test suite (bats or plain bash)
-- [ ] Per-project template variants (e.g. `devkit init --template python-api`)
+- [ ] Per-project template variants (e.g. `reta init --template python-api`)
 - [ ] macOS-specific fixes for `logs-t` and `xargs -r`
 
 ## License
@@ -164,4 +176,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 ## Contact
 
-Open an issue on [GitHub](https://github.com/[GITHUB_USERNAME]/devkit/issues).
+Open an issue on [GitHub](https://github.com/eraygdev/reta-toolkit/issues).

@@ -77,7 +77,7 @@ export.py
 project_export.md
 project_export.txt
 exports/
-Makefile
+/Makefile
 
 # Logs
 *.log

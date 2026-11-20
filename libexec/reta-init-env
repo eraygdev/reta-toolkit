@@ -71,7 +71,7 @@ def main() -> int:
         )
         return 1
 
-    print(f"{BOLD}devkit init-env{RESET}")
+    print(f"{BOLD}reta init-env{RESET}")
     print(f"  source: {src}")
     print(f"  output: {dst}")
     print()

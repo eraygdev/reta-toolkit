@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Check dev-kit installation health.
+# Check reta installation health.
 # group: Diagnostics
 set -uo pipefail
 shopt -s nullglob
 
-DEVKIT_ROOT="$HOME/.dev-kit"
+RETA_ROOT="$HOME/.reta"
 TARGET="$HOME/.local/bin"
 
 ok=0
@@ -15,34 +15,34 @@ check_ok()   { echo "  OK    $1"; ok=$((ok+1)); }
 check_warn() { echo "  WARN  $1"; warn=$((warn+1)); }
 check_fail() { echo "  FAIL  $1"; fail=$((fail+1)); }
 
-echo "devkit doctor"
+echo "reta doctor"
 echo ""
 
 echo "Symlinks:"
-if [ -L "$HOME/.dev-kit" ] && [ -e "$HOME/.dev-kit" ]; then
-    check_ok "~/.dev-kit -> $(readlink "$HOME/.dev-kit")"
-elif [ -e "$HOME/.dev-kit" ]; then
-    check_warn "~/.dev-kit exists but is not a symlink"
+if [ -L "$HOME/.reta" ] && [ -e "$HOME/.reta" ]; then
+    check_ok "~/.reta -> $(readlink "$HOME/.reta")"
+elif [ -d "$HOME/.reta" ]; then
+    check_ok "~/.reta exists (direct install)"
 else
-    check_fail "~/.dev-kit missing (run install.sh)"
+    check_fail "~/.reta missing (run install.sh)"
 fi
 
-if [ -L "$TARGET/devkit" ] && [ -x "$TARGET/devkit" ]; then
-    check_ok "~/.local/bin/devkit -> $(readlink "$TARGET/devkit")"
+if [ -L "$TARGET/reta" ] && [ -x "$TARGET/reta" ]; then
+    check_ok "~/.local/bin/reta -> $(readlink "$TARGET/reta")"
 else
-    check_fail "~/.local/bin/devkit missing or not executable"
+    check_fail "~/.local/bin/reta missing or not executable"
 fi
 
 echo ""
 echo "Files:"
-[ -f "$DEVKIT_ROOT/VERSION" ] && check_ok "VERSION ($(cat "$DEVKIT_ROOT/VERSION"))" || check_fail "VERSION missing"
-[ -f "$DEVKIT_ROOT/lib/base.mk" ] && check_ok "lib/base.mk" || check_fail "lib/base.mk missing"
-[ -x "$DEVKIT_ROOT/lib/export-context" ] && check_ok "lib/export-context (executable)" || check_warn "lib/export-context not executable"
+[ -f "$RETA_ROOT/VERSION" ] && check_ok "VERSION ($(cat "$RETA_ROOT/VERSION"))" || check_fail "VERSION missing"
+[ -f "$RETA_ROOT/lib/base.mk" ] && check_ok "lib/base.mk" || check_fail "lib/base.mk missing"
+[ -x "$RETA_ROOT/lib/export-context" ] && check_ok "lib/export-context (executable)" || check_warn "lib/export-context not executable"
 
 echo ""
 echo "Subcommands:"
-if [ -d "$DEVKIT_ROOT/libexec" ]; then
-    for f in "$DEVKIT_ROOT/libexec"/devkit-*; do
+if [ -d "$RETA_ROOT/libexec" ]; then
+    for f in "$RETA_ROOT/libexec"/reta-*; do
         name="$(basename "$f")"
         if [ -x "$f" ]; then
             check_ok "$name"

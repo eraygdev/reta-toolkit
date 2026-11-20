@@ -156,7 +156,6 @@ INCLUDE_NAMES = {
     ".yarnrc",
     "Cargo.toml",
     "go.mod",
-    "go.sum",
     "LICENSE",
     "LICENCE",
     "COPYING",
@@ -219,7 +218,8 @@ EXCLUDE_NAMES = {
     "desktop.ini",
 }
 
-EXCLUDE_DIRS = {
+# Directories completely hidden from the export (no name, no size).
+HIDDEN_DIRS = {
     ".git",
     ".hg",
     ".svn",
@@ -238,10 +238,12 @@ EXCLUDE_DIRS = {
     ".tox",
     ".nox",
     ".eggs",
+    ".coverage",
     "build",
     "dist",
     "htmlcov",
-    ".coverage",
+    "coverage",
+    ".nyc_output",
     "node_modules",
     ".next",
     ".nuxt",
@@ -253,8 +255,6 @@ EXCLUDE_DIRS = {
     ".vercel",
     ".netlify",
     ".cache",
-    "coverage",
-    ".nyc_output",
     "playwright-report",
     "target",
     "vendor",
@@ -262,19 +262,32 @@ EXCLUDE_DIRS = {
     "gradle",
     ".m2",
     "Pods",
+}
+
+# Directories whose total size is reported as a single summary block,
+# but whose contents (file names, contents) are never included.
+SUMMARY_DIRS = {
     "data",
+    "datasets",
+    "raw",
+    "processed",
+    "models",
+    "checkpoints",
+    "weights",
     "assets",
+    "media",
+    "static",
     "backups",
-    "tmp",
-    "temp",
+    "exports",
+    "reports",
     "logs",
-    "faster-whisper-tiny",
-    "piper-data",
+    "notebooks",
     "mlruns",
     "mlartifacts",
-    "notebooks",
-    "reports",
-    "exports",
+    "faster-whisper-tiny",
+    "piper-data",
+    "tmp",
+    "temp",
 }
 
 EXCLUDE_EXT = {
@@ -523,7 +536,7 @@ def matches_ignore(rel_path: str, patterns: list[str]) -> bool:
 def should_skip_dir(name: str) -> bool:
     if name == ".github":
         return False
-    return name in EXCLUDE_DIRS or name.startswith(".")
+    return name in HIDDEN_DIRS or name in SUMMARY_DIRS or name.startswith(".")
 
 
 def should_include_file(path: Path) -> bool:
@@ -546,6 +559,63 @@ def should_include_file(path: Path) -> bool:
         except Exception:
             return False
     return False
+
+
+def is_excluded_file(path: Path) -> bool:
+    return path.name in EXCLUDE_NAMES or path.suffix.lower() in EXCLUDE_EXT
+
+
+def dir_total_size(path: Path) -> int:
+    total = 0
+    for cur, _, names in os.walk(path):
+        for n in names:
+            try:
+                total += (Path(cur) / n).stat().st_size
+            except OSError:
+                pass
+    return total
+
+
+def collect_dir_summaries(
+    root: Path, exportignore: list[str]
+) -> list[tuple[Path, int]]:
+    summaries: list[tuple[Path, int]] = []
+    for cur, dirs, _ in os.walk(root):
+        for d in dirs:
+            if d not in SUMMARY_DIRS:
+                continue
+            p = Path(cur) / d
+            rel = str(p.relative_to(root)).replace(os.sep, "/")
+            if matches_ignore(rel + "/", exportignore):
+                continue
+            summaries.append((p, dir_total_size(p)))
+        dirs[:] = [d for d in dirs if not should_skip_dir(d)]
+    summaries.sort(key=lambda x: str(x[0]).lower())
+    return summaries
+
+
+def collect_skipped(
+    root: Path, exportignore: list[str], skip_paths: set[Path]
+) -> list[tuple[Path, int]]:
+    skipped: list[tuple[Path, int]] = []
+    for cur, dirs, names in os.walk(root):
+        dirs[:] = [d for d in dirs if not should_skip_dir(d)]
+        for n in names:
+            p = Path(cur) / n
+            if p in skip_paths:
+                continue
+            rel = str(p.relative_to(root)).replace(os.sep, "/")
+            if matches_ignore(rel, exportignore):
+                continue
+            if not is_excluded_file(p):
+                continue
+            try:
+                size = p.stat().st_size
+            except OSError:
+                continue
+            skipped.append((p, size))
+    skipped.sort(key=lambda x: str(x[0]).lower())
+    return skipped
 
 
 def collect_files(
@@ -659,7 +729,12 @@ def main() -> None:
         print("No matching files.")
         sys.exit(1)
 
-    print(f"Found {len(files)} files. Writing...\n")
+    skipped = collect_skipped(root, exportignore, {output})
+    summaries = collect_dir_summaries(root, exportignore)
+    print(
+        f"Found {len(files)} files "
+        f"({len(skipped)} skipped, {len(summaries)} dirs summarized). Writing...\n"
+    )
 
     total = 0
     written = 0
@@ -671,12 +746,15 @@ def main() -> None:
         out.write("---\n\n## Contents\n\n")
 
         valid: list[tuple[Path, str]] = []
+        oversized: list[tuple[Path, int]] = []
         for f in files:
             try:
-                if f.stat().st_size > max_size:
-                    print(f"  skipped (size): {f.relative_to(root)}")
-                    continue
+                fsize = f.stat().st_size
             except OSError:
+                continue
+            if fsize > max_size:
+                oversized.append((f, fsize))
+                print(f"  skipped (size): {f.relative_to(root)}")
                 continue
             content = read_safe(f)
             if content is None:
@@ -684,8 +762,18 @@ def main() -> None:
                 continue
             valid.append((f, content))
 
+        skipped = sorted(skipped + oversized, key=lambda x: str(x[0]).lower())
+
         for f, _ in valid:
             out.write(f"- `{f.relative_to(root)}`\n")
+        for f, size in skipped:
+            out.write(
+                f"- `{f.relative_to(root)}` ({human_size(size)}, content omitted)\n"
+            )
+        for d, size in summaries:
+            out.write(
+                f"- `{d.relative_to(root)}/` ({human_size(size)}, content omitted)\n"
+            )
         out.write("\n---\n\n")
 
         for f, content in valid:
@@ -704,9 +792,26 @@ def main() -> None:
                 out.write("\n")
             out.write("```\n\n---\n\n")
 
+        for f, size in skipped:
+            rel = f.relative_to(root)
+            out.write(f"## `{rel}`\n\n")
+            out.write(f"Size: {size:,} bytes\n\n")
+            out.write("_(Content was not included by export.py)_\n\n")
+            out.write("---\n\n")
+
+        for d, size in summaries:
+            rel = d.relative_to(root)
+            out.write(f"## `{rel}/`\n\n")
+            out.write(f"Size: {size:,} bytes\n\n")
+            out.write("_(Directory content was not included by export.py)_\n\n")
+            out.write("---\n\n")
+
     size_mb = total / (1024 * 1024)
     print(f"\nDone.")
-    print(f"Files: {written}, Total: {human_size(total)}")
+    print(
+        f"Files: {written} included, {len(skipped)} skipped, "
+        f"{len(summaries)} dirs summarized, Total: {human_size(total)}"
+    )
     print(f"Output: {output}")
 
     if size_mb > args.warn_mb:

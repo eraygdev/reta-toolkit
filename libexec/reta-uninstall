@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Uninstall reta: remove symlinks and (optionally) the toolkit directory.
+# group: Setup
+set -euo pipefail
+
+RETA_ROOT="$HOME/.reta"
+TARGET="$HOME/.local/bin"
+
+KEEP_SOURCE=0
+ASSUME_YES=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --keep|--keep-source) KEEP_SOURCE=1 ;;
+        -y|--yes) ASSUME_YES=1 ;;
+        -h|--help)
+            echo "Usage: reta uninstall [--keep] [-y]"
+            echo ""
+            echo "  --keep       Remove only the PATH symlink; keep $RETA_ROOT"
+            echo "  -y, --yes    Skip confirmation prompts"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+    shift
+done
+
+echo "reta uninstall"
+echo ""
+
+# 1. Remove ~/.local/bin/reta symlink (only if it points to our install)
+if [ -L "$TARGET/reta" ]; then
+    target=$(readlink -f "$TARGET/reta" 2>/dev/null || true)
+    expected=$(readlink -f "$RETA_ROOT/bin/reta" 2>/dev/null || true)
+    if [ "$target" = "$expected" ]; then
+        rm -f "$TARGET/reta"
+        echo "OK  removed $TARGET/reta"
+    else
+        echo "WARN $TARGET/reta points to $target, not to this install"
+        echo "     Leaving it alone. Remove manually if you want:"
+        echo "       rm $TARGET/reta"
+    fi
+elif [ -e "$TARGET/reta" ]; then
+    echo "WARN $TARGET/reta exists but is not a symlink; leaving it alone"
+else
+    echo "SKIP $TARGET/reta not found"
+fi
+
+# 2. Stop here if --keep
+if [ "$KEEP_SOURCE" -eq 1 ]; then
+    echo "OK  kept $RETA_ROOT (--keep)"
+    echo ""
+    echo "To reinstall: cd $RETA_ROOT && ./install.sh"
+    exit 0
+fi
+
+if [ ! -e "$RETA_ROOT" ]; then
+    echo "SKIP $RETA_ROOT not found"
+    exit 0
+fi
+
+# 2b. If ~/.reta is a symlink, only remove the link — never the target
+if [ -L "$RETA_ROOT" ]; then
+    echo "OK  $RETA_ROOT is a symlink -> $(readlink "$RETA_ROOT")"
+    rm -f "$RETA_ROOT"
+    echo "OK  removed symlink (source directory kept intact)"
+    exit 0
+fi
+
+# 2c. Safety: refuse to delete if it doesn't look like a reta install
+if [ ! -f "$RETA_ROOT/bin/reta" ] || [ ! -d "$RETA_ROOT/libexec" ]; then
+    echo "ERROR: $RETA_ROOT does not look like a reta installation."
+    echo "       Expected: $RETA_ROOT/bin/reta and $RETA_ROOT/libexec/"
+    echo "       Refusing to delete. Remove manually if you are sure:"
+    echo "         rm -rf $RETA_ROOT"
+    exit 1
+fi
+
+# 3. Warn about uncommitted git changes
+if [ -d "$RETA_ROOT/.git" ]; then
+    dirty=$(git -C "$RETA_ROOT" status --porcelain 2>/dev/null | wc -l)
+    if [ "$dirty" -gt 0 ]; then
+        echo ""
+        echo "WARN $RETA_ROOT has $dirty uncommitted change(s):"
+        git -C "$RETA_ROOT" status --short 2>/dev/null | sed 's/^/       /'
+        echo ""
+    fi
+fi
+
+# 4. Confirm before deleting the whole directory
+if [ "$ASSUME_YES" -eq 0 ]; then
+    echo ""
+    echo "About to delete: $RETA_ROOT"
+    read -rp "Continue? [y/N] " ans
+    case "$ans" in
+        [yY]|[yY][eE][sS]) ;;
+        *) echo "Cancelled."; exit 0 ;;
+    esac
+fi
+
+rm -rf "$RETA_ROOT"
+echo "OK  removed $RETA_ROOT"
+
+echo ""
+echo "Done."
+echo "Note: the PATH entry in your shell config was NOT touched."
+echo "      To remove it manually, delete the line containing"
+echo "      \$HOME/.local/bin from ~/.bashrc or ~/.zshrc."

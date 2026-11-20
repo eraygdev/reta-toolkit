@@ -2,33 +2,37 @@
 set -euo pipefail
 shopt -s nullglob
 
-DEV_KIT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+RETA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$HOME/.local/bin"
 
-echo "dev-kit installer"
-echo "Source: $DEV_KIT_DIR"
+echo "reta installer"
+echo "Source: $RETA_DIR"
 echo ""
 
 mkdir -p "$TARGET"
 
-# 1. ~/.dev-kit symlink
-if [ -L "$HOME/.dev-kit" ]; then
-    rm -f "$HOME/.dev-kit"
-elif [ -e "$HOME/.dev-kit" ]; then
-    echo "ERROR: ~/.dev-kit exists but is not a symlink."
-    echo "       Move or remove it manually, then re-run."
-    exit 1
+# 1. ~/.reta symlink (skipped if the repo already lives there)
+if [ "$RETA_DIR" = "$HOME/.reta" ]; then
+    echo "OK  already installed at ~/.reta"
+else
+    if [ -L "$HOME/.reta" ]; then
+        rm -f "$HOME/.reta"
+    elif [ -e "$HOME/.reta" ]; then
+        echo "ERROR: ~/.reta exists but is not a symlink."
+        echo "       Move or remove it manually, then re-run."
+        exit 1
+    fi
+    ln -sfn "$RETA_DIR" "$HOME/.reta"
+    echo "OK  ~/.reta -> $RETA_DIR"
 fi
-ln -sfn "$DEV_KIT_DIR" "$HOME/.dev-kit"
-echo "OK  ~/.dev-kit -> $DEV_KIT_DIR"
 
-# 2. Kırık symlink temizliği (sadece dev-kit'e işaret edenler)
+# 2. Broken symlink cleanup (only links pointing into ~/.reta)
 broken=0
 for link in "$TARGET"/*; do
     [ -L "$link" ] || continue
     t="$(readlink "$link" 2>/dev/null || true)"
     case "$t" in
-        "$HOME/.dev-kit"/*|"$DEV_KIT_DIR"/*)
+        "$HOME/.reta"/*|"$RETA_DIR"/*)
             if [ ! -e "$t" ]; then
                 rm -f "$link"
                 echo "OK  cleaned broken: $(basename "$link")"
@@ -38,15 +42,15 @@ for link in "$TARGET"/*; do
     esac
 done
 
-# 3. Executable bit'leri ayarla
-chmod +x "$DEV_KIT_DIR/bin"/* 2>/dev/null || true
-chmod +x "$DEV_KIT_DIR/libexec"/* 2>/dev/null || true
-chmod +x "$DEV_KIT_DIR/lib/export-context" 2>/dev/null || true
+# 3. Set executable bits
+chmod +x "$RETA_DIR/bin"/* 2>/dev/null || true
+chmod +x "$RETA_DIR/libexec"/* 2>/dev/null || true
+chmod +x "$RETA_DIR/lib/export-context" 2>/dev/null || true
 
-# 4. Sadece 'devkit' PATH'e girer
-[ -L "$TARGET/devkit" ] && rm -f "$TARGET/devkit"
-ln -sf "$DEV_KIT_DIR/bin/devkit" "$TARGET/devkit"
-echo "OK  devkit -> $DEV_KIT_DIR/bin/devkit"
+# 4. Only 'reta' goes onto PATH
+[ -L "$TARGET/reta" ] && rm -f "$TARGET/reta"
+ln -sf "$RETA_DIR/bin/reta" "$TARGET/reta"
+echo "OK  reta -> $RETA_DIR/bin/reta"
 
 # 5. PATH kontrolü
 case ":$PATH:" in
@@ -62,4 +66,4 @@ case ":$PATH:" in
 esac
 
 echo ""
-echo "Done. Test: devkit help"
+echo "Done. Test: reta help"
