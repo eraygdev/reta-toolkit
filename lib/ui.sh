@@ -25,7 +25,7 @@ ui_ok()     { printf "  %sOK%s    %s\n"   "$GREEN"  "$RESET" "$*"; }
 ui_warn()   { printf "  %sWARN%s  %s\n"   "$YELLOW" "$RESET" "$*"; }
 ui_err()    { printf "  %sERR%s   %s\n"   "$RED"    "$RESET" "$*" >&2; }
 ui_fail()   { printf "  %sFAIL%s  %s\n"   "$RED"    "$RESET" "$*"; }
-ui_header() { printf "\n%s%s%s\n"         "$BOLD"   "$*"     "$RESET"; }
+ui_dim()    { printf "  %s%s%s\n"         "$DIM"    "$*"     "$RESET"; }
 
 _reta_hints_enabled() {
     case "${RETA_HINTS:-}" in

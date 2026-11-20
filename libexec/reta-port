@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# List listening ports, or kill a process on a specific port.
+# group: Utilities
+set -euo pipefail
+
+# shellcheck source=../lib/ui.sh
+source "$HOME/.reta/lib/ui.sh"
+
+require_lsof() {
+    if ! command -v lsof >/dev/null 2>&1; then
+        ui_err "lsof is required but not installed."
+        echo "  Ubuntu/Debian: sudo apt install lsof" >&2
+        echo "  macOS:         preinstalled" >&2
+        exit 1
+    fi
+}
+
+usage() {
+    echo "reta port — list or kill listening ports"
+    echo ""
+    echo "Usage: reta port <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  list [PORT]    List listening ports (optionally filter by PORT)"
+    echo "  kill [PORT]    Kill a process listening on a port"
+    echo "                 Without PORT: interactive selector"
+    exit 0
+}
+
+collect_ports() {
+    lsof -i -P -n 2>/dev/null | awk 'NR>1 && /LISTEN/ {
+        port = ""
+        for (i = 1; i <= NF; i++) {
+            if ($i ~ /:[0-9]+$/) {
+                n = split($i, a, ":")
+                port = a[n]
+            }
+        }
+        if (port != "") printf "%-6s %-20s %-8s %s\n", port, $1, $2, $9
+    }'
+}
+
+cmd_list() {
+    require_lsof
+    local filter="${1:-}"
+    local raw
+    raw=$(collect_ports)
+
+    if [ -z "$raw" ]; then
+        ui_dim "No listening ports found."
+        return 0
+    fi
+
+    local output="$raw"
+    if [ -n "$filter" ]; then
+        output=$(printf "%s\n" "$raw" | awk -v p="$filter" '$1 == p')
+        if [ -z "$output" ]; then
+            ui_dim "No process listening on port $filter."
+            return 0
+        fi
+    fi
+
+    printf "  %s%-6s %-20s %-8s %s%s\n" "$BOLD" "PORT" "COMMAND" "PID" "ADDRESS" "$RESET"
+    printf "%s\n" "$output" | sed 's/^/  /'
+}
+
+_kill_pids() {
+    local label="$1"
+    local pids="$2"
+
+    echo ""
+    echo "Target: $label"
+    echo "PIDs:   $(echo "$pids" | tr '\n' ' ')"
+    echo ""
+    read -rp "Kill these processes? [y/N] " ans
+    case "$ans" in
+        [yY]|[yY][eE][sS]) ;;
+        *) ui_dim "Cancelled."; return 0 ;;
+    esac
+
+    local killed=0
+    local pid
+    while IFS= read -r pid; do
+        [ -z "$pid" ] && continue
+        if kill -15 "$pid" 2>/dev/null; then
+            killed=$((killed+1))
+        fi
+    done <<< "$pids"
+
+    sleep 1
+
+    while IFS= read -r pid; do
+        [ -z "$pid" ] && continue
+        if kill -0 "$pid" 2>/dev/null; then
+            ui_warn "PID $pid did not exit, sending SIGKILL..."
+            kill -9 "$pid" 2>/dev/null || true
+        fi
+    done <<< "$pids"
+
+    ui_ok "Killed $killed process(es)."
+}
+
+cmd_kill_by_port() {
+    local port="$1"
+    local pids
+    pids=$(lsof -i ":$port" -s TCP:LISTEN -t 2>/dev/null || true)
+    if [ -z "$pids" ]; then
+        ui_dim "No process listening on port $port."
+        return 0
+    fi
+    _kill_pids "port $port" "$pids"
+}
+
+cmd_kill_interactive() {
+    local raw
+    raw=$(collect_ports)
+    if [ -z "$raw" ]; then
+        ui_dim "No listening ports found."
+        return 0
+    fi
+
+    local selected
+    if command -v fzf >/dev/null 2>&1; then
+        selected=$(printf "%s\n" "$raw" | \
+            fzf --prompt="Kill port> " --height=40% --reverse \
+                --header="PORT   COMMAND              PID")
+        [ -z "$selected" ] && return 0
+    else
+        echo "Listening ports:"
+        echo ""
+        local i=1
+        while IFS= read -r line; do
+            printf "  %2d) %s\n" "$i" "$line"
+            i=$((i+1))
+        done <<< "$raw"
+        echo ""
+        read -rp "Select port number (or q to quit): " choice
+        if [ -z "$choice" ] || [ "$choice" = "q" ]; then
+            return 0
+        fi
+        if ! [[ "$choice" =~ ^[0-9]+$ ]]; then
+            ui_err "Invalid selection: $choice"
+            exit 1
+        fi
+        selected=$(printf "%s\n" "$raw" | sed -n "${choice}p")
+        if [ -z "$selected" ]; then
+            ui_err "Invalid selection: $choice"
+            exit 1
+        fi
+    fi
+
+    local port pid
+    port=$(printf "%s" "$selected" | awk '{print $1}')
+    pid=$(printf "%s" "$selected" | awk '{print $3}')
+
+    if [ -z "$pid" ] || [ -z "$port" ]; then
+        ui_err "Could not parse selection: $selected"
+        exit 1
+    fi
+
+    _kill_pids "port $port (PID $pid)" "$pid"
+}
+
+cmd_kill() {
+    require_lsof
+    local target="${1:-}"
+    if [ -n "$target" ]; then
+        cmd_kill_by_port "$target"
+    else
+        cmd_kill_interactive
+    fi
+}
+
+main() {
+    local sub="${1:-}"
+    [ $# -gt 0 ] && shift
+
+    case "$sub" in
+        list|ls)  cmd_list "$@" ;;
+        kill)     cmd_kill "$@" ;;
+        help|--help|-h|"") usage ;;
+        *)
+            ui_err "Unknown subcommand: $sub"
+            echo "Run: reta port help"
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

@@ -11,7 +11,7 @@
 
 ## Overview
 
-`reta` is a single-command toolkit that bundles the small, repetitive tasks every project needs: scaffolding a new repo with consistent structure, generating `.env` files with auto-filled secrets, sharing a common set of `make` targets across projects, and killing zombie processes on local ports.
+`reta` is a single-command toolkit that bundles the small, repetitive tasks every project needs: scaffolding a new repo with consistent structure, generating `.env` files with auto-filled secrets, sharing a common set of `make` targets across projects, and managing processes on local ports.
 
 Unlike full dotfiles managers (chezmoi, yadm), `reta` focuses on **project-level tooling** — what happens inside each repo — rather than managing `$HOME` itself. Every project includes the same `~/.reta/lib/base.mk`, so improvements to the shared toolkit propagate everywhere without touching individual projects.
 
@@ -23,7 +23,7 @@ Unlike full dotfiles managers (chezmoi, yadm), `reta` focuses on **project-level
 - **Env inspection** — `reta env check|list|diff` validates `.env` against `.env.example`, flags missing/empty/duplicate keys, and masks secret values
 - **Shared make targets** — `lib/base.mk` is `include`d by every project, giving them `up`, `down`, `logs`, `clean`, `git-sync`, `export`, and more
 - **Installation health check** — `reta doctor` verifies symlinks, file permissions, `PATH`, and dependencies
-- **Port killer** — `reta killport` lists listening ports interactively (via `fzf` or a numbered menu) and terminates the chosen process with SIGTERM, escalating to SIGKILL if needed
+- **Port manager** — `reta port list` shows listening ports; `reta port kill` terminates a process by port or via interactive selector (`fzf` or numbered menu), using SIGTERM then SIGKILL
 - **Contextual hints** — commands end with "Next steps" suggestions; can be disabled globally via `reta config hints off`
 - **Clean uninstall** — `reta uninstall` removes only its own files; refuses to touch anything that doesn't look like a `reta` install
 
@@ -44,8 +44,8 @@ Unlike full dotfiles managers (chezmoi, yadm), `reta` focuses on **project-level
 - Python 3.10+
 - GNU Make
 - Git
-- `lsof` (for `reta killport`)
-- `fzf` (optional, improves `reta killport`)
+- `lsof` (for `reta port`)
+- `fzf` (optional, improves `reta port kill`)
 - Docker (optional, only if projects use `make up`)
 
 ### Installation
@@ -114,10 +114,10 @@ misbehavior across `docker --env-file`, `python-dotenv`, and `source .env`.
 ### Manage running ports
 
 ```bash
-reta killport
-# ? Select a port to kill:
-#   8001  python3     PID=12345  *:8001
-#   5432  postgres    PID=67890  127.0.0.1:5432
+reta port list           # list all listening ports
+reta port list 8000      # show only port 8000
+reta port kill           # interactive selector (kill by PID)
+reta port kill 8000      # kill whatever listens on port 8000
 ```
 
 ### Configure
@@ -175,7 +175,7 @@ reta-toolkit/
 │   ├── reta-env
 │   ├── reta-init
 │   ├── reta-init-env
-│   ├── reta-killport
+│   ├── reta-port
 │   ├── reta-uninstall
 │   └── reta-update
 ├── templates/              # Files copied into new projects
@@ -219,7 +219,7 @@ TBD — there is no automated test suite yet. Manual verification via `reta doct
 - [x] `.env` generation (`reta init-env`)
 - [x] Env inspection (`reta env check|list|diff`)
 - [x] Persistent settings (`reta config`)
-- [x] Port killer (`reta killport`)
+- [x] Port manager (`reta port list|kill`)
 - [x] Installation health check (`reta doctor`)
 - [x] Self-update (`reta update`)
 - [x] Clean uninstall (`reta uninstall`)
