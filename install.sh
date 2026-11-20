@@ -69,4 +69,9 @@ case ":$PATH:" in
 esac
 
 echo ""
-echo "Done. Test: reta help"
+ui_ok "reta installed"
+ui_next_steps \
+    "reta doctor       Verify installation health" \
+    "reta help         List all available commands" \
+    "reta init         Scaffold templates into a new project" \
+    "reta init-env     Generate .env from .env.example"
