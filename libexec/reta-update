@@ -4,7 +4,52 @@
 set -euo pipefail
 
 cd "$HOME/.reta"
+
+if [ ! -d .git ]; then
+    echo "ERROR: ~/.reta is not a git repository."
+    echo "Reinstall from scratch:"
+    echo "  rm -rf ~/.reta"
+    echo "  git clone https://github.com/eraygdev/reta-toolkit.git ~/.reta"
+    echo "  cd ~/.reta && ./install.sh"
+    exit 1
+fi
+
+old_version="$(cat VERSION 2>/dev/null || echo "unknown")"
+old_head="$(git rev-parse HEAD)"
+
 echo "Pulling from origin..."
-git pull --rebase
+if ! git pull --rebase; then
+    echo ""
+    echo "ERROR: git pull --rebase failed."
+    conflicts=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+    if [ -n "$conflicts" ]; then
+        echo "Conflicting files:"
+        echo "$conflicts" | sed 's/^/  /'
+        echo ""
+    fi
+    echo "Resolve conflicts manually, then:"
+    echo "  cd ~/.reta && git rebase --continue"
+    echo "  reta update"
+    exit 1
+fi
+
+new_version="$(cat VERSION 2>/dev/null || echo "unknown")"
+new_head="$(git rev-parse HEAD)"
+
+if [ "$old_head" = "$new_head" ]; then
+    echo "Already up to date ($new_version)."
+else
+    echo ""
+    echo "Changes:"
+    git diff --stat "$old_head" "$new_head" | sed 's/^/  /'
+    echo ""
+    if [ "$old_version" != "$new_version" ]; then
+        echo "Version: $old_version -> $new_version"
+    else
+        echo "Version: $new_version (unchanged)"
+    fi
+fi
+
+echo ""
 echo "Re-running installer..."
 "$HOME/.reta/install.sh"

@@ -33,3 +33,23 @@ shopt -u dotglob nullglob
 
 echo ""
 echo "Done: $copied copied, $skipped skipped."
+
+# --- Next steps (context-aware) ---
+next=()
+if [ -f "$TARGET_DIR/.env.example" ] && [ ! -f "$TARGET_DIR/.env" ]; then
+    next+=("reta init-env      Generate .env from .env.example")
+fi
+if [ ! -d "$TARGET_DIR/.git" ]; then
+    next+=("git init           Initialize a git repository")
+fi
+if [ -f "$TARGET_DIR/Makefile" ]; then
+    next+=("make help          List available make targets")
+fi
+
+if [ ${#next[@]} -gt 0 ]; then
+    echo ""
+    echo "Next steps:"
+    for step in "${next[@]}"; do
+        printf "  → %s\n" "$step"
+    done
+fi
