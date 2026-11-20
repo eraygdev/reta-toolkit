@@ -3,14 +3,17 @@
 # group: Setup
 set -euo pipefail
 
+# shellcheck source=../lib/ui.sh
+source "$HOME/.reta/lib/ui.sh"
+
 cd "$HOME/.reta"
 
 if [ ! -d .git ]; then
-    echo "ERROR: ~/.reta is not a git repository."
-    echo "Reinstall from scratch:"
-    echo "  rm -rf ~/.reta"
-    echo "  git clone https://github.com/eraygdev/reta-toolkit.git ~/.reta"
-    echo "  cd ~/.reta && ./install.sh"
+    ui_err "~/.reta is not a git repository."
+    echo "Reinstall from scratch:" >&2
+    echo "  rm -rf ~/.reta" >&2
+    echo "  git clone https://github.com/eraygdev/reta-toolkit.git ~/.reta" >&2
+    echo "  cd ~/.reta && ./install.sh" >&2
     exit 1
 fi
 
@@ -20,36 +23,52 @@ old_head="$(git rev-parse HEAD)"
 echo "Pulling from origin..."
 if ! git pull --rebase; then
     echo ""
-    echo "ERROR: git pull --rebase failed."
-    conflicts=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
-    if [ -n "$conflicts" ]; then
-        echo "Conflicting files:"
-        echo "$conflicts" | sed 's/^/  /'
-        echo ""
+    if [ -n "$(git status --porcelain 2>/dev/null)" ]; then
+        ui_err "You have uncommitted changes in ~/.reta."
+        echo "       git pull --rebase needs a clean working tree." >&2
+        echo "" >&2
+        echo "       Either commit them:" >&2
+        echo "         cd ~/.reta && git add -A && git commit -m 'wip'" >&2
+        echo "       Or stash them temporarily:" >&2
+        echo "         cd ~/.reta && git stash" >&2
+        echo "         reta update" >&2
+        echo "         git stash pop" >&2
+    else
+        conflicts=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+        if [ -n "$conflicts" ]; then
+            ui_err "Rebase produced conflicts in:"
+            echo "$conflicts" | sed 's/^/  /' >&2
+            echo "" >&2
+            echo "Resolve them, then:" >&2
+            echo "  cd ~/.reta && git add -A && git rebase --continue" >&2
+            echo "  reta update" >&2
+        else
+            ui_err "git pull --rebase failed for an unknown reason."
+            echo "       Run manually: cd ~/.reta && git pull --rebase" >&2
+        fi
     fi
-    echo "Resolve conflicts manually, then:"
-    echo "  cd ~/.reta && git rebase --continue"
-    echo "  reta update"
     exit 1
 fi
 
 new_version="$(cat VERSION 2>/dev/null || echo "unknown")"
 new_head="$(git rev-parse HEAD)"
 
+echo ""
+
 if [ "$old_head" = "$new_head" ]; then
-    echo "Already up to date ($new_version)."
+    ui_ok "Already up to date ($new_version)."
 else
-    echo ""
     echo "Changes:"
     git diff --stat "$old_head" "$new_head" | sed 's/^/  /'
     echo ""
     if [ "$old_version" != "$new_version" ]; then
-        echo "Version: $old_version -> $new_version"
+        ui_ok "Version: $old_version -> $new_version"
     else
-        echo "Version: $new_version (unchanged)"
+        ui_dim "Version: $new_version (unchanged)"
     fi
 fi
 
 echo ""
 echo "Re-running installer..."
+echo ""
 "$HOME/.reta/install.sh"

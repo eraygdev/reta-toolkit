@@ -11,13 +11,8 @@ import secrets
 import sys
 from pathlib import Path
 
-BOLD = "\033[1m"
-DIM = "\033[2m"
-CYAN = "\033[36m"
-GREEN = "\033[32m"
-YELLOW = "\033[1;33m"
-RED = "\033[31m"
-RESET = "\033[0m"
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "lib"))
+from ui import BOLD, DIM, CYAN, GREEN, YELLOW, RED, RESET, next_steps  # noqa: E402
 
 
 def generate_secret() -> str:
@@ -157,6 +152,12 @@ def main() -> int:
             print(
                 f"\n{YELLOW}warn{RESET} .env is not in .gitignore — add it before committing!"
             )
+
+    steps = ["reta env check     Verify all keys are filled"]
+    steps.append("reta env list      Preview keys with masked values")
+    if Path("Makefile").exists():
+        steps.append("make help          List available make targets")
+    next_steps(steps)
 
     return 0
 

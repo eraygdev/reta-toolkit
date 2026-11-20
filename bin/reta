@@ -6,12 +6,8 @@ shopt -s nullglob
 RETA_ROOT="$HOME/.reta"
 RETA_LIBEXEC="$RETA_ROOT/libexec"
 
-BOLD='\033[1m'
-DIM='\033[2m'
-CYAN='\033[36m'
-YELLOW='\033[1;33m'
-MAGENTA='\033[1;35m'
-RESET='\033[0m'
+# shellcheck source=../lib/ui.sh
+source "$HOME/.reta/lib/ui.sh"
 
 version="$(cat "$RETA_ROOT/VERSION" 2>/dev/null || echo "unknown")"
 

@@ -3,6 +3,9 @@
 # group: Setup
 set -euo pipefail
 
+# shellcheck source=../lib/ui.sh
+source "$HOME/.reta/lib/ui.sh"
+
 TEMPLATES="$HOME/.reta/templates"
 TARGET_DIR="${1:-.}"
 if [ ! -d "$TARGET_DIR" ]; then
@@ -46,10 +49,4 @@ if [ -f "$TARGET_DIR/Makefile" ]; then
     next+=("make help          List available make targets")
 fi
 
-if [ ${#next[@]} -gt 0 ]; then
-    echo ""
-    echo "Next steps:"
-    for step in "${next[@]}"; do
-        printf "  → %s\n" "$step"
-    done
-fi
+ui_next_steps "${next[@]}"

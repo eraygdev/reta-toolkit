@@ -3,6 +3,9 @@
 # group: Setup
 set -euo pipefail
 
+# shellcheck source=../lib/ui.sh
+source "$HOME/.reta/lib/ui.sh"
+
 RETA_ROOT="$HOME/.reta"
 TARGET="$HOME/.local/bin"
 
@@ -21,7 +24,7 @@ while [ $# -gt 0 ]; do
             exit 0
             ;;
         *)
-            echo "Unknown option: $1"
+            ui_err "Unknown option: $1"
             exit 1
             ;;
     esac
@@ -37,45 +40,45 @@ if [ -L "$TARGET/reta" ]; then
     expected=$(readlink -f "$RETA_ROOT/bin/reta" 2>/dev/null || true)
     if [ "$target" = "$expected" ]; then
         rm -f "$TARGET/reta"
-        echo "OK  removed $TARGET/reta"
+        ui_ok "removed $TARGET/reta"
     else
-        echo "WARN $TARGET/reta points to $target, not to this install"
+        ui_warn "$TARGET/reta points to $target, not to this install"
         echo "     Leaving it alone. Remove manually if you want:"
         echo "       rm $TARGET/reta"
     fi
 elif [ -e "$TARGET/reta" ]; then
-    echo "WARN $TARGET/reta exists but is not a symlink; leaving it alone"
+    ui_warn "$TARGET/reta exists but is not a symlink; leaving it alone"
 else
-    echo "SKIP $TARGET/reta not found"
+    ui_dim "$TARGET/reta not found (nothing to remove)"
 fi
 
 # 2. Stop here if --keep
 if [ "$KEEP_SOURCE" -eq 1 ]; then
-    echo "OK  kept $RETA_ROOT (--keep)"
+    ui_ok "kept $RETA_ROOT (--keep)"
     echo ""
     echo "To reinstall: cd $RETA_ROOT && ./install.sh"
     exit 0
 fi
 
 if [ ! -e "$RETA_ROOT" ]; then
-    echo "SKIP $RETA_ROOT not found"
+    ui_dim "$RETA_ROOT not found"
     exit 0
 fi
 
 # 2b. If ~/.reta is a symlink, only remove the link — never the target
 if [ -L "$RETA_ROOT" ]; then
-    echo "OK  $RETA_ROOT is a symlink -> $(readlink "$RETA_ROOT")"
+    ui_ok "$RETA_ROOT is a symlink -> $(readlink "$RETA_ROOT")"
     rm -f "$RETA_ROOT"
-    echo "OK  removed symlink (source directory kept intact)"
+    ui_ok "removed symlink (source directory kept intact)"
     exit 0
 fi
 
 # 2c. Safety: refuse to delete if it doesn't look like a reta install
 if [ ! -f "$RETA_ROOT/bin/reta" ] || [ ! -d "$RETA_ROOT/libexec" ]; then
-    echo "ERROR: $RETA_ROOT does not look like a reta installation."
-    echo "       Expected: $RETA_ROOT/bin/reta and $RETA_ROOT/libexec/"
-    echo "       Refusing to delete. Remove manually if you are sure:"
-    echo "         rm -rf $RETA_ROOT"
+    ui_err "$RETA_ROOT does not look like a reta installation."
+    echo "       Expected: $RETA_ROOT/bin/reta and $RETA_ROOT/libexec/" >&2
+    echo "       Refusing to delete. Remove manually if you are sure:" >&2
+    echo "         rm -rf $RETA_ROOT" >&2
     exit 1
 fi
 
@@ -84,7 +87,7 @@ if [ -d "$RETA_ROOT/.git" ]; then
     dirty=$(git -C "$RETA_ROOT" status --porcelain 2>/dev/null | wc -l)
     if [ "$dirty" -gt 0 ]; then
         echo ""
-        echo "WARN $RETA_ROOT has $dirty uncommitted change(s):"
+        ui_warn "$RETA_ROOT has $dirty uncommitted change(s):"
         git -C "$RETA_ROOT" status --short 2>/dev/null | sed 's/^/       /'
         echo ""
     fi
@@ -97,12 +100,12 @@ if [ "$ASSUME_YES" -eq 0 ]; then
     read -rp "Continue? [y/N] " ans
     case "$ans" in
         [yY]|[yY][eE][sS]) ;;
-        *) echo "Cancelled."; exit 0 ;;
+        *) ui_dim "Cancelled."; exit 0 ;;
     esac
 fi
 
 rm -rf "$RETA_ROOT"
-echo "OK  removed $RETA_ROOT"
+ui_ok "removed $RETA_ROOT"
 
 echo ""
 echo "Done."
