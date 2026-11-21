@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # Generate .env from .env.example. Resolves GENERATE_SECRET and AUTO_HASH markers.
 # group: Setup
+# order: 20
 
 from __future__ import annotations
 
 import argparse
 import getpass
-import hashlib
 import secrets
 import sys
 from pathlib import Path
@@ -20,15 +20,17 @@ def generate_secret() -> str:
     return secrets.token_hex(32)
 
 
-def hash_password(password: str) -> tuple[str, bool]:
-    """Return (hash, used_bcrypt). Falls back to sha256 if bcrypt missing."""
+def hash_password(password: str) -> str:
+    """Return a bcrypt hash. Raises RuntimeError if bcrypt is not installed."""
     try:
         import bcrypt  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "bcrypt is required for AUTO_HASH. Install it with: pip install bcrypt"
+        ) from exc
 
-        h = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
-        return h.decode(), True
-    except ImportError:
-        return hashlib.sha256(password.encode()).hexdigest(), False
+    h = bcrypt.hashpw(password.encode(), bcrypt.gensalt())
+    return h.decode()
 
 
 def main() -> int:
@@ -104,11 +106,11 @@ def main() -> int:
                     output_lines.append(f"{key}=")
                     skip_count += 1
                 else:
-                    h, used_bcrypt = hash_password(pw)
-                    if not used_bcrypt:
-                        print(
-                            f"  {YELLOW}warn{RESET} bcrypt not installed, used sha256 for {key}"
-                        )
+                    try:
+                        h = hash_password(pw)
+                    except RuntimeError as exc:
+                        print(f"{RED}Error:{RESET} {exc}", file=sys.stderr)
+                        return 1
                     output_lines.append(f"{key}={h}")
                     hash_count += 1
                     print(f"  {GREEN}hashed{RESET} {CYAN}{key}{RESET}")
@@ -148,7 +150,23 @@ def main() -> int:
     gitignore = Path(".gitignore")
     if gitignore.exists():
         content = gitignore.read_text(encoding="utf-8")
-        if ".env" not in content.split("\n"):
+        ignored = False
+        for raw in content.splitlines():
+            pattern = raw.strip()
+            if not pattern or pattern.startswith("#"):
+                continue
+            if pattern in {
+                ".env",
+                "/.env",
+                ".env*",
+                "/.env*",
+                "*.env",
+                "**/.env",
+                "**/.env*",
+            }:
+                ignored = True
+                break
+        if not ignored:
             print(
                 f"\n{YELLOW}warn{RESET} .env is not in .gitignore — add it before committing!"
             )

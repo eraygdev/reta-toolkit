@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Pull latest reta changes and reinstall.
 # group: Setup
+# order: 90
 set -euo pipefail
 
 # shellcheck source=../lib/ui.sh

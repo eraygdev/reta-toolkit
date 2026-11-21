@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Uninstall reta: remove symlinks and (optionally) the toolkit directory.
 # group: Setup
+# order: 999
 set -euo pipefail
 
 # shellcheck source=../lib/ui.sh

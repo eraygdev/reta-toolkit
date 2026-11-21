@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # View and change persistent reta settings.
 # group: Setup
+# order: 40
 
 from __future__ import annotations
 

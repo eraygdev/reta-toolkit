@@ -49,6 +49,9 @@ done
 chmod +x "$RETA_DIR/bin"/* 2>/dev/null || true
 chmod +x "$RETA_DIR/libexec"/* 2>/dev/null || true
 chmod +x "$RETA_DIR/lib/export-context" 2>/dev/null || true
+chmod +x "$RETA_DIR/lib/check-secrets" 2>/dev/null || true
+chmod +x "$RETA_DIR/lib/adopt-makefile" 2>/dev/null || true
+chmod +x "$RETA_DIR/tests/run.sh" 2>/dev/null || true
 
 # 4. Only 'reta' goes onto PATH
 [ -L "$TARGET/reta" ] && rm -f "$TARGET/reta"
@@ -67,6 +70,29 @@ case ":$PATH:" in
         echo "Then: source ~/.zshrc"
         ;;
 esac
+
+# 6. Shell completion (best-effort, never aborts install)
+echo ""
+echo "Shell completion:"
+BASH_COMPLETION_DIR="$HOME/.local/share/bash-completion/completions"
+ZSH_COMPLETION_DIR="$HOME/.zfunc"
+
+if [ -f "$RETA_DIR/lib/completion.bash" ]; then
+    mkdir -p "$BASH_COMPLETION_DIR"
+    ln -sfn "$RETA_DIR/lib/completion.bash" "$BASH_COMPLETION_DIR/reta"
+    ui_ok "bash: $BASH_COMPLETION_DIR/reta"
+fi
+
+if [ -f "$RETA_DIR/lib/completion.zsh" ] && command -v zsh >/dev/null 2>&1; then
+    mkdir -p "$ZSH_COMPLETION_DIR"
+    ln -sfn "$RETA_DIR/lib/completion.zsh" "$ZSH_COMPLETION_DIR/_reta"
+    ui_ok "zsh:  $ZSH_COMPLETION_DIR/_reta"
+    if ! grep -qs "fpath.*\.zfunc" "$HOME/.zshrc" 2>/dev/null; then
+        ui_warn "zsh: add to ~/.zshrc:"
+        echo "      fpath+=~/.zfunc"
+        echo "      autoload -Uz compinit && compinit"
+    fi
+fi
 
 echo ""
 ui_ok "reta installed"

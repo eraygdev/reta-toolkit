@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 # Inspect .env against .env.example: missing keys, masked values, key diff.
 # group: Setup
+# order: 30
 
 from __future__ import annotations
 
 import argparse
+import getpass
+import secrets
 import sys
 from pathlib import Path
 
@@ -18,11 +21,6 @@ def die_missing(path: Path, hints: list[str]) -> None:
     print("Next steps:", file=sys.stderr)
     for hint in hints:
         print(f"  {BOLD}{hint}{RESET}", file=sys.stderr)
-
-
-def parse_env(path: Path) -> dict[str, str]:
-    result, _ = parse_env_with_dupes(path)
-    return result
 
 
 def parse_env_with_dupes(path: Path) -> tuple[dict[str, str], list[str]]:
@@ -119,6 +117,83 @@ def cmd_diff(example: dict[str, str], env: dict[str, str]) -> int:
     return 1
 
 
+def hash_password(password: str) -> str:
+    try:
+        import bcrypt  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "bcrypt is required for AUTO_HASH. Install it with: pip install bcrypt"
+        ) from exc
+    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+
+
+def cmd_sync(
+    example: dict[str, str],
+    env: dict[str, str],
+    env_path: Path,
+    dry_run: bool,
+) -> int:
+    missing = [k for k in example if k not in env]
+    if not missing:
+        print(
+            f"{GREEN}OK{RESET} .env already has all keys from .env.example ({len(example)} keys)"
+        )
+        return 0
+
+    new_lines: list[str] = []
+    for k in missing:
+        val = example[k]
+        if val == "GENERATE_SECRET":
+            resolved = secrets.token_hex(32)
+            print(f"  {GREEN}generated{RESET} {CYAN}{k}{RESET}")
+        elif val == "AUTO_HASH":
+            if not sys.stdin.isatty():
+                resolved = ""
+                print(f"  {YELLOW}skip{RESET} {k} (non-interactive)")
+            else:
+                pw = getpass.getpass(f"  password for {k}: ")
+                if not pw:
+                    resolved = ""
+                    print(f"  {YELLOW}skip{RESET} {k} (empty password)")
+                else:
+                    try:
+                        resolved = hash_password(pw)
+                    except RuntimeError as exc:
+                        print(f"{RED}Error:{RESET} {exc}", file=sys.stderr)
+                        return 1
+                    print(f"  {GREEN}hashed{RESET} {CYAN}{k}{RESET}")
+        elif val == "":
+            if sys.stdin.isatty():
+                resolved = input(f"  {k} {DIM}(press Enter to skip){RESET}: ").strip()
+            else:
+                resolved = ""
+            if resolved:
+                print(f"  {GREEN}set{RESET} {CYAN}{k}{RESET}")
+            else:
+                print(f"  {YELLOW}skip{RESET} {k}")
+        else:
+            resolved = val
+            print(f"  {GREEN}added{RESET} {CYAN}{k}{RESET}")
+        new_lines.append(f"{k}={resolved}")
+
+    if dry_run:
+        print(f"\n{DIM}--- dry run, would append to {env_path}: ---{RESET}")
+        for ln in new_lines:
+            print(ln)
+        print(f"{DIM}--- end ---{RESET}")
+        return 0
+
+    existing = env_path.read_text(encoding="utf-8")
+    prefix = "" if (not existing or existing.endswith("\n")) else "\n"
+    env_path.write_text(
+        existing + prefix + "\n".join(new_lines) + "\n", encoding="utf-8"
+    )
+
+    print("")
+    print(f"{GREEN}done{RESET} synced {len(new_lines)} key(s) into {env_path}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(
         description="Inspect .env against .env.example.",
@@ -133,6 +208,12 @@ def main() -> int:
     p_list = sub.add_parser("list", help="List keys in .env with masked values")
     p_list.add_argument("--show", action="store_true", help="Show real values")
     sub.add_parser("diff", help="Compare keys between .env and .env.example")
+    p_sync = sub.add_parser(
+        "sync", help="Append missing keys from .env.example to .env"
+    )
+    p_sync.add_argument(
+        "-n", "--dry-run", action="store_true", help="Preview without modifying .env"
+    )
 
     args = ap.parse_args()
 
@@ -146,6 +227,9 @@ def main() -> int:
         print(f"  {CYAN}list{RESET}     List keys in .env with masked values")
         print(f"           Use {BOLD}--show{RESET} to reveal values")
         print(f"  {CYAN}diff{RESET}     Compare keys between .env and .env.example")
+        print(
+            f"  {CYAN}sync{RESET}     Append missing keys from .env.example into .env"
+        )
         print("")
         print("Options:")
         print(f"  {BOLD}--env{RESET}      Env file (default: .env)")
@@ -215,7 +299,7 @@ def main() -> int:
                     "reta env check     Re-check after editing",
                 ]
             )
-        return 0
+        return code
     if args.cmd == "list":
         code = cmd_list(env, args.show)
         if code == 0:
@@ -238,8 +322,19 @@ def main() -> int:
         else:
             next_steps(
                 [
-                    "sync .env with .env.example",
+                    "reta env sync      Append missing keys into .env",
                     "reta env check     Re-verify after syncing",
+                ]
+            )
+        return code
+
+    if args.cmd == "sync":
+        code = cmd_sync(example, env, env_path, args.dry_run)
+        if code == 0 and not args.dry_run:
+            next_steps(
+                [
+                    "reta env check     Verify all keys are filled",
+                    "reta env list      Preview keys with masked values",
                 ]
             )
         return code

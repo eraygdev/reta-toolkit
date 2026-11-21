@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -618,21 +619,112 @@ def collect_skipped(
     return skipped
 
 
+def resolve_output_from_dir(root: Path, export_dir: str) -> Path:
+    val = export_dir.strip() or "exports"
+    if val == ".":
+        return (root / "project_export.md").resolve()
+    p = Path(val).expanduser()
+    if p.is_absolute():
+        return (p / "project_export.md").resolve()
+    return (root / p / "project_export.md").resolve()
+
+
+def dir_file_stats(path: Path) -> tuple[int, int]:
+    count = 0
+    total_bytes = 0
+    for cur, _, names in os.walk(path):
+        for n in names:
+            count += 1
+            try:
+                total_bytes += (Path(cur) / n).stat().st_size
+            except OSError:
+                pass
+    return count, total_bytes
+
+
+def clean_exports_dir(root: Path, target_dir: Path, dangerous: set[str]) -> int:
+    target_dir = target_dir.resolve()
+    root_resolved = root.resolve()
+
+    if root_resolved.name == "exports":
+        print(
+            f"Refusing to bulk-delete: project root directory '{root_resolved}' is named 'exports'.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if target_dir == root_resolved:
+        print(
+            "Refusing to bulk-delete project root directory. Use 'make clean-export' to remove only project_export.md.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if target_dir.name != "exports":
+        print(
+            f"Refusing to bulk-delete '{target_dir}': only directories named 'exports' can be bulk-cleaned.",
+            file=sys.stderr,
+        )
+        return 1
+
+    if str(target_dir) in dangerous or target_dir == Path.home().resolve():
+        print(f"Refusing to clean protected path: {target_dir}", file=sys.stderr)
+        return 1
+
+    if not target_dir.exists() or not target_dir.is_dir():
+        print(f"Nothing to clean ({target_dir} does not exist).")
+        return 0
+
+    children = list(target_dir.iterdir())
+    if not children:
+        print(f"Nothing to clean ({target_dir} is already empty).")
+        return 0
+
+    file_count, total_bytes = dir_file_stats(target_dir)
+    top_dirs = sum(1 for c in children if c.is_dir())
+    detail = f"{file_count} file(s)"
+    if top_dirs > 0 and file_count == 0:
+        detail = f"{top_dirs} empty folder(s)"
+
+    print(f"About to delete {detail} ({human_size(total_bytes)}) inside: {target_dir}/")
+    try:
+        ans = input("Continue? [y/N] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print("\nCancelled.")
+        return 0
+
+    if ans not in ("y", "yes"):
+        print("Cancelled.")
+        return 0
+
+    for item in children:
+        if item.is_dir() and not item.is_symlink():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+
+    print(f"Cleaned {detail} ({human_size(total_bytes)}) from {target_dir}/.")
+    return 0
+
+
 def collect_files(
-    root: Path, include: list[str], exportignore: list[str]
+    root: Path,
+    include: list[str],
+    exportignore: list[str],
+    skip_paths: set[Path] | None = None,
 ) -> list[Path]:
     files: list[Path] = []
+    skip = {p.resolve() for p in (skip_paths or set())}
     for cur, dirs, names in os.walk(root):
         dirs[:] = [d for d in dirs if not should_skip_dir(d)]
         for n in names:
             p = Path(cur) / n
+            if p.resolve() in skip:
+                continue
             rel = str(p.relative_to(root)).replace(os.sep, "/")
             if matches_ignore(rel, exportignore):
                 continue
             if include and not any(fnmatch.fnmatch(rel, pat) for pat in include):
-                continue
-            if ".github" in rel and n.endswith((".yml", ".yaml")):
-                files.append(p)
                 continue
             if should_include_file(p):
                 files.append(p)
@@ -686,14 +778,31 @@ def main() -> None:
         description="Export project source to a single markdown file."
     )
     ap.add_argument("-r", "--root", type=Path, default=Path(".").resolve())
+    ap.add_argument(
+        "-d", "--dir", default="exports", help="Output directory (default: exports)"
+    )
     ap.add_argument("-o", "--output", type=Path, default=None)
     ap.add_argument("--max-size", default="2M")
     ap.add_argument("--include", action="append", default=[])
     ap.add_argument("--warn-mb", type=float, default=0.8)
+    ap.add_argument(
+        "--clean",
+        action="store_true",
+        help="Remove existing export file before regenerating",
+    )
+    ap.add_argument(
+        "--clean-exports",
+        action="store_true",
+        help="Remove all files inside exports/ (with confirmation) without regenerating",
+    )
     args = ap.parse_args()
 
     root = args.root.resolve()
-    output = (args.output or (root / "project_export.md")).resolve()
+    output = (
+        args.output.resolve()
+        if args.output
+        else resolve_output_from_dir(root, args.dir)
+    )
     max_size = parse_size(args.max_size)
 
     dangerous = {
@@ -707,6 +816,10 @@ def main() -> None:
         "/proc",
         "/root",
     }
+
+    if args.clean_exports:
+        sys.exit(clean_exports_dir(root, output.parent, dangerous))
+
     if str(root) in dangerous or root == Path.home().resolve():
         print(f"Refusing to scan protected path: {root}")
         sys.exit(1)
@@ -714,6 +827,10 @@ def main() -> None:
     if not root.exists():
         print(f"Root not found: {root}")
         sys.exit(1)
+
+    if args.clean and output.exists() and output.is_file():
+        output.unlink()
+        print(f"Removed old export: {output}")
 
     exportignore = load_exportignore(root)
 
@@ -724,7 +841,7 @@ def main() -> None:
         print(f"Ignore:   {len(exportignore)} rules from .exportignore")
     print()
 
-    files = collect_files(root, args.include, exportignore)
+    files = collect_files(root, args.include, exportignore, {output})
     if not files:
         print("No matching files.")
         sys.exit(1)
@@ -739,6 +856,7 @@ def main() -> None:
     total = 0
     written = 0
 
+    output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as out:
         out.write(f"# Project Export — {root.name}\n\n")
         out.write(f"**Root:** `{root}`\n\n")
@@ -807,10 +925,14 @@ def main() -> None:
             out.write("---\n\n")
 
     size_mb = total / (1024 * 1024)
+    try:
+        est_tokens = output.stat().st_size // 4
+    except OSError:
+        est_tokens = total // 4
     print(f"\nDone.")
     print(
         f"Files: {written} included, {len(skipped)} skipped, "
-        f"{len(summaries)} dirs summarized, Total: {human_size(total)}"
+        f"{len(summaries)} dirs summarized, Total: {human_size(total)} (~{est_tokens:,} tokens)"
     )
     print(f"Output: {output}")
 

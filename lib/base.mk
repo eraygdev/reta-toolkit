@@ -8,33 +8,49 @@ COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compos
 
 SHELL := /bin/bash
 .DEFAULT_GOAL := help
+DIR ?= exports
+SRC ?= .
 
 # === Help ===
 
 help:  ## Show all targets (base + project)
 	@echo "Available targets:"
-	@awk 'BEGIN {FS = ":.*?## "} \
+	@awk -v dir="$(DIR)" 'BEGIN {FS = ":.*?## "; pending = ""} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
 	    sub(/ ===$$/, "", line); \
-	    print ""; \
-	    printf "  \033[1;33m%s\033[0m\n", line; \
+	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z_-]+:.*?## / { \
-	    printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 \
+	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	    if (pending != "") { \
+	      print ""; \
+	      printf "  \033[1;33m%s\033[0m\n", pending; \
+	      pending = ""; \
+	    } \
+	    desc = $$2; \
+	    gsub(/\$$\(DIR\)/, dir, desc); \
+	    printf "  \033[36m%-18s\033[0m %s\n", $$1, desc \
 	  }' $(HOME)/.reta/lib/base.mk
-	@proj=$$(awk 'BEGIN {FS = ":.*?## "} \
+	@proj=$$(awk 'BEGIN {FS = ":.*?## "; pending = ""; first = 1} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
 	    sub(/ ===$$/, "", line); \
-	    print ""; \
-	    printf "  \033[1;33m%s\033[0m\n", line; \
+	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z_-]+:.*?## / { \
+	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	    if (pending != "") { \
+	      print ""; \
+	      printf "  \033[1;33m%s\033[0m\n", pending; \
+	      pending = ""; \
+	      first = 0; \
+	    } else if (first) { \
+	      print ""; \
+	      first = 0; \
+	    } \
 	    printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 \
 	  }' $(firstword $(MAKEFILE_LIST))); \
 	if [ -n "$$proj" ]; then \
@@ -46,31 +62,41 @@ help:  ## Show all targets (base + project)
 
 help-base:  ## Show only base targets
 	@echo "Base targets:"
-	@awk 'BEGIN {FS = ":.*?## "} \
+	@awk -v dir="$(DIR)" 'BEGIN {FS = ":.*?## "; pending = ""} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
 	    sub(/ ===$$/, "", line); \
-	    print ""; \
-	    printf "  \033[1;33m%s\033[0m\n", line; \
+	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z_-]+:.*?## / { \
-	    printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 \
+	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	    if (pending != "") { \
+	      print ""; \
+	      printf "  \033[1;33m%s\033[0m\n", pending; \
+	      pending = ""; \
+	    } \
+	    desc = $$2; \
+	    gsub(/\$$\(DIR\)/, dir, desc); \
+	    printf "  \033[36m%-18s\033[0m %s\n", $$1, desc \
 	  }' $(HOME)/.reta/lib/base.mk
 
 help-project:  ## Show only project-specific targets
 	@echo "Project-specific targets:"
-	@awk 'BEGIN {FS = ":.*?## "} \
+	@awk 'BEGIN {FS = ":.*?## "; pending = ""} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
 	    sub(/ ===$$/, "", line); \
-	    print ""; \
-	    printf "  \033[1;33m%s\033[0m\n", line; \
+	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z_-]+:.*?## / { \
+	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	    if (pending != "") { \
+	      print ""; \
+	      printf "  \033[1;33m%s\033[0m\n", pending; \
+	      pending = ""; \
+	    } \
 	    printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 \
 	  }' $(firstword $(MAKEFILE_LIST))
 
@@ -110,10 +136,15 @@ logs-all:  ## Stream logs from all services (no prefix)
 	@$(COMPOSE) logs --no-log-prefix -f --tail 50
 
 logs-t:  ## Stream logs in a new terminal tab
-	@gnome-terminal --tab -- bash -c "cd $(PWD) && $(COMPOSE) logs -f --tail 50; exec bash" 2>/dev/null || \
-	 x-terminal-emulator -e "bash -c 'cd $(PWD) && $(COMPOSE) logs -f --tail 50'" 2>/dev/null || \
-	 konsole --new-tab -e bash -c "cd $(PWD) && $(COMPOSE) logs -f --tail 50" 2>/dev/null || \
-	 (echo "Warning: could not open new tab, falling back to 'make logs'"; cd $(PWD) && $(COMPOSE) logs -f --tail 50)
+	@if [ "$$(uname -s)" = "Darwin" ]; then \
+		osascript -e 'tell application "Terminal" to do script "cd \"$(CURDIR)\" && $(COMPOSE) logs -f --tail 50"' >/dev/null 2>&1 || \
+		(echo "Warning: could not open Terminal.app, falling back to 'make logs'"; cd "$(CURDIR)" && $(COMPOSE) logs -f --tail 50); \
+	else \
+		gnome-terminal --tab -- bash -c "cd \"$(CURDIR)\" && $(COMPOSE) logs -f --tail 50; exec bash" 2>/dev/null || \
+		x-terminal-emulator -e "bash -c 'cd \"$(CURDIR)\" && $(COMPOSE) logs -f --tail 50'" 2>/dev/null || \
+		konsole --new-tab -e bash -c "cd \"$(CURDIR)\" && $(COMPOSE) logs -f --tail 50" 2>/dev/null || \
+		(echo "Warning: could not open new tab, falling back to 'make logs'"; cd "$(CURDIR)" && $(COMPOSE) logs -f --tail 50); \
+	fi
 
 logs-errors:  ## Stream only errors (live filter)
 	@$(COMPOSE) logs -f --tail 0 2>&1 | grep --line-buffered -iE "error|fatal|exception|traceback"
@@ -138,16 +169,42 @@ clean-docker:  ## Safe docker prune (volumes preserved)
 
 # === Export ===
 
-export:  ## Export source for AI context
+export:  ## Export source for AI context (DIR=$(DIR))
 	@if [ ! -x "$(HOME)/.reta/lib/export-context" ]; then \
 		echo "Error: export-context not found at ~/.reta/lib/export-context"; \
 		exit 1; \
 	fi
-	@$(HOME)/.reta/lib/export-context
+	@if [ "$(SRC)" = "." ]; then \
+		$(HOME)/.reta/lib/export-context --dir "$(DIR)"; \
+	elif [ "$(DIR)" = "." ]; then \
+		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/project_export.md"; \
+	elif [[ "$(DIR)" = /* ]]; then \
+		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(DIR)/project_export.md"; \
+	else \
+		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/$(DIR)/project_export.md"; \
+	fi
 
-clean-export:  ## Remove old export and regenerate
-	@rm -f project_export.md exports/project_export.md
-	@$(MAKE) --no-print-directory export
+clean-export:  ## Remove old export and regenerate (DIR=$(DIR))
+	@if [ ! -x "$(HOME)/.reta/lib/export-context" ]; then \
+		echo "Error: export-context not found at ~/.reta/lib/export-context"; \
+		exit 1; \
+	fi
+	@if [ "$(SRC)" = "." ]; then \
+		$(HOME)/.reta/lib/export-context --dir "$(DIR)" --clean; \
+	elif [ "$(DIR)" = "." ]; then \
+		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/project_export.md" --clean; \
+	elif [[ "$(DIR)" = /* ]]; then \
+		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(DIR)/project_export.md" --clean; \
+	else \
+		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/$(DIR)/project_export.md" --clean; \
+	fi
+
+clean-exports:  ## Delete all files inside exports/ (with confirmation)
+	@if [ ! -x "$(HOME)/.reta/lib/export-context" ]; then \
+		echo "Error: export-context not found at ~/.reta/lib/export-context"; \
+		exit 1; \
+	fi
+	@$(HOME)/.reta/lib/export-context --dir "$(DIR)" --clean-exports
 
 # === Git ===
 
@@ -161,11 +218,21 @@ git-sync:  ## Fetch, rebase, delete gone branches
 git-status:  ## Short git status
 	@git status -sb
 
+# === Security ===
+
+check-secrets:  ## Scan repo for tracked .env files and leaked secrets
+	@if [ ! -x "$(HOME)/.reta/lib/check-secrets" ]; then \
+		echo "Error: check-secrets not found at ~/.reta/lib/check-secrets"; \
+		exit 1; \
+	fi
+	@$(HOME)/.reta/lib/check-secrets
+
 # --- PHONY ---
 
 .PHONY: help help-base help-project \
         up down restart rebuild ps sh \
         logs logs-all logs-t logs-errors logs-warn \
         clean clean-docker \
-        export clean-export \
-        git-sync git-status
+        export clean-export clean-exports \
+        git-sync git-status \
+        check-secrets

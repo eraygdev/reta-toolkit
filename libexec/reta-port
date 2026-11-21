@@ -107,7 +107,7 @@ collect_ports() {
             seen[$port]=1
 
             if [ -n "${docker_map[$port]:-}" ]; then
-                printf "%-6s %-20s %-8s %s\n" "$port" "${docker_map[$port]}" "docker" "$addr"
+                printf "%-8s %-20s %-8s %s\n" "$port" "${docker_map[$port]}" "docker" "$addr"
                 continue
             fi
 
@@ -124,7 +124,7 @@ collect_ports() {
             fi
             [ -z "$pid" ] && pid="-"
 
-            printf "%-6s %-20s %-8s %s\n" "$port" "$proc" "$pid" "$addr"
+            printf "%-8s %-20s %-8s %s\n" "$port" "$proc" "$pid" "$addr"
         done < <(ss -tulpn 2>/dev/null | awk 'NR>1 && /LISTEN/')
         return
     fi
@@ -138,7 +138,7 @@ collect_ports() {
                     port = a[n]
                 }
             }
-            if (port != "") printf "%-6s %-20s %-8s %s\n", port, $1, $2, $9
+            if (port != "") printf "%-8s %-20s %-8s %s\n", port, $1, $2, $9
         }'
     fi
 }
@@ -148,7 +148,7 @@ _print_group() {
     local body="$2"
     [ -z "$body" ] && return
     printf "\n  %s%s%s\n" "$BOLD" "$label" "$RESET"
-    printf "%s" "$body" | sed 's/^/    /'
+    printf "%s" "$body" | sed 's/^/  /'
 }
 
 cmd_list() {
@@ -185,7 +185,7 @@ cmd_list() {
         esac
     done <<< "$output"
 
-    printf "  %s%-6s %-20s %-8s %s%s\n" "$BOLD" "PORT" "COMMAND" "PID" "ADDRESS" "$RESET"
+    printf "  %s%-8s %-20s %-8s %s%s\n" "$BOLD" "PORT" "COMMAND" "PID" "ADDRESS" "$RESET"
     _print_group "SYSTEM" "$system_lines"
     _print_group "DOCKER" "$docker_lines"
     _print_group "USER"   "$user_lines"
@@ -212,6 +212,35 @@ _confirm_risky_ports() {
         [yY]|[yY][eE][sS]) return 0 ;;
         *) ui_dim "Cancelled."; return 1 ;;
     esac
+}
+
+collect_pids_for_port() {
+    local port="$1"
+    local use_sudo="${2:-0}"
+
+    if command -v lsof >/dev/null 2>&1; then
+        if [ "$use_sudo" = "1" ]; then
+            sudo -n lsof -i ":$port" -s TCP:LISTEN -t 2>/dev/null || true
+        else
+            lsof -i ":$port" -s TCP:LISTEN -t 2>/dev/null || true
+        fi
+        return
+    fi
+
+    if command -v ss >/dev/null 2>&1; then
+        local ss_out
+        if [ "$use_sudo" = "1" ]; then
+            ss_out=$(sudo -n ss -tulpn 2>/dev/null || true)
+        else
+            ss_out=$(ss -tulpn 2>/dev/null || true)
+        fi
+        printf '%s\n' "$ss_out" | awk -v p=":$port" '
+            /LISTEN/ && $5 ~ (p "$") {
+                if (match($0, /pid=[0-9]+/)) {
+                    print substr($0, RSTART + 4, RLENGTH - 4)
+                }
+            }' | sort -u
+    fi
 }
 
 _kill_pids() {
@@ -277,9 +306,9 @@ cmd_kill_by_port() {
     fi
 
     local pids
-    pids=$(lsof -i ":$port" -s TCP:LISTEN -t 2>/dev/null || true)
+    pids=$(collect_pids_for_port "$port")
     if [ -z "$pids" ]; then
-        pids=$(sudo -n lsof -i ":$port" -s TCP:LISTEN -t 2>/dev/null || true)
+        pids=$(collect_pids_for_port "$port" 1)
     fi
     if [ -z "$pids" ]; then
         ui_dim "No process listening on port $port (or you need sudo)."

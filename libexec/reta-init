@@ -1,13 +1,42 @@
 #!/usr/bin/env bash
 # Copy reta project templates into the current directory.
 # group: Setup
+# order: 10
 set -euo pipefail
 
 # shellcheck source=../lib/ui.sh
 source "$HOME/.reta/lib/ui.sh"
 
-TEMPLATES="$HOME/.reta/templates"
-TARGET_DIR="${1:-.}"
+RETA_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+TEMPLATES="$RETA_ROOT/templates"
+ADOPT_SCRIPT="$RETA_ROOT/lib/adopt-makefile"
+
+TARGET_DIR="."
+CONVERT_MAKEFILE=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --convert)
+            CONVERT_MAKEFILE=1
+            ;;
+        -h|--help)
+            echo "Usage: reta init [DIR] [--convert]"
+            echo ""
+            echo "  DIR          Target directory (default: current directory)"
+            echo "  --convert    Convert existing Makefile to reta template without prompting"
+            exit 0
+            ;;
+        -*)
+            echo "Error: unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            TARGET_DIR="$1"
+            ;;
+    esac
+    shift
+done
+
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Error: target directory does not exist: $TARGET_DIR"
     exit 1
@@ -19,13 +48,41 @@ echo "Target: $TARGET_DIR"
 echo ""
 
 shopt -s dotglob nullglob
-copied=0; skipped=0
+copied=0; skipped=0; converted=0
+adopt_summary=""
 for src in "$TEMPLATES"/*; do
     name="$(basename "$src")"
     dst="$TARGET_DIR/$name"
     if [ -e "$dst" ]; then
-        echo "  skip  $name (exists)"
-        skipped=$((skipped+1))
+        if [ "$name" = "Makefile" ] && [ -f "$dst" ] && [ -x "$ADOPT_SCRIPT" ]; then
+            if grep -qE 'RETA_BASE|base\.mk' "$dst" 2>/dev/null; then
+                echo "  skip  $name (already uses base.mk)"
+                skipped=$((skipped+1))
+            elif [ "$CONVERT_MAKEFILE" -eq 1 ]; then
+                adopt_summary="$("$ADOPT_SCRIPT" "$dst" --summary-only --no-hints)"
+                echo "  conv  $name (backup: $name.bak)"
+                converted=$((converted+1))
+            elif [ -t 0 ] && [ -t 1 ]; then
+                read -rp "  Makefile already exists. Convert it to reta template? [y/N] " ans
+                case "$ans" in
+                    [yY]|[yY][eE][sS])
+                        adopt_summary="$("$ADOPT_SCRIPT" "$dst" --summary-only --no-hints)"
+                        echo "  conv  $name (backup: $name.bak)"
+                        converted=$((converted+1))
+                        ;;
+                    *)
+                        echo "  skip  $name (exists)"
+                        skipped=$((skipped+1))
+                        ;;
+                esac
+            else
+                echo "  skip  $name (exists)"
+                skipped=$((skipped+1))
+            fi
+        else
+            echo "  skip  $name (exists)"
+            skipped=$((skipped+1))
+        fi
     else
         cp -r "$src" "$dst"
         echo "  ok    $name"
@@ -35,7 +92,17 @@ done
 shopt -u dotglob nullglob
 
 echo ""
-echo "Done: $copied copied, $skipped skipped."
+if [ "$converted" -gt 0 ]; then
+    echo "Done: $copied copied, $converted converted, $skipped skipped."
+else
+    echo "Done: $copied copied, $skipped skipped."
+fi
+
+if [ -n "$adopt_summary" ]; then
+    echo ""
+    echo "Makefile conversion:"
+    printf "%s\n" "$adopt_summary"
+fi
 
 # --- Next steps (context-aware) ---
 next=()
@@ -46,7 +113,19 @@ if [ ! -d "$TARGET_DIR/.git" ]; then
     next+=("git init           Initialize a git repository")
 fi
 if [ -f "$TARGET_DIR/Makefile" ]; then
-    next+=("make help          List available make targets")
+    if [ "$converted" -gt 0 ]; then
+        next+=("make help                Verify converted targets and headings")
+        if grep -q "EDIT_HERE" "$TARGET_DIR/Makefile" 2>/dev/null; then
+            next+=("grep EDIT_HERE Makefile  Review marked items")
+        fi
+        if [ -f "$TARGET_DIR/Makefile.bak" ]; then
+            next+=("rm Makefile.bak          Remove backup once verified")
+        fi
+    else
+        next+=("make help          List available make targets")
+    fi
 fi
 
-ui_next_steps "${next[@]}"
+if [ ${#next[@]} -gt 0 ]; then
+    ui_next_steps "${next[@]}"
+fi
