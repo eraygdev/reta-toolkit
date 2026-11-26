@@ -110,26 +110,50 @@ help-project:  ## Show only project-specific targets
 # === Docker ===
 
 up:  ## Start the stack
+	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
+		echo "Error: No compose file found. This project is not Docker-based."; \
+		exit 1; \
+	fi
 	$(call SHOW_CMD,$(COMPOSE) up -d)
 	@$(COMPOSE) up -d
 
 down:  ## Stop the stack
+	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
+		echo "Error: No compose file found. This project is not Docker-based."; \
+		exit 1; \
+	fi
 	$(call SHOW_CMD,$(COMPOSE) down)
 	@$(COMPOSE) down
 
 restart:  ## Restart services
+	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
+		echo "Error: No compose file found. This project is not Docker-based."; \
+		exit 1; \
+	fi
 	$(call SHOW_CMD,$(COMPOSE) restart)
 	@$(COMPOSE) restart
 
 rebuild:  ## Rebuild and restart (force-recreate)
+	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
+		echo "Error: No compose file found. This project is not Docker-based."; \
+		exit 1; \
+	fi
 	$(call SHOW_CMD,$(COMPOSE) up -d --build --force-recreate)
 	@$(COMPOSE) up -d --build --force-recreate
 
 ps:  ## Show service status
+	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
+		echo "Error: No compose file found. This project is not Docker-based."; \
+		exit 1; \
+	fi
 	$(call SHOW_CMD,$(COMPOSE) ps)
 	@$(COMPOSE) ps
 
 sh:  ## Open shell in a container (make sh SERVICE=api)
+	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
+		echo "Error: No compose file found. This project is not Docker-based."; \
+		exit 1; \
+	fi
 	@if [ -z "$(SERVICE)" ]; then \
 		echo "Error: usage: make sh SERVICE=<service>"; \
 		echo ""; \

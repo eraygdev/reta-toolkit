@@ -62,7 +62,45 @@ func replaceBinary(exePath string, newBytes []byte) error {
 	return nil
 }
 
-func updateFromGitRepo(retaRoot string) int {
+func localReinstallAction() int {
+	c := ui.Colors()
+	home, _ := os.UserHomeDir()
+	retaRoot := filepath.Join(home, ".reta")
+	installSh := filepath.Join(retaRoot, "install.sh")
+	if _, err := os.Stat(installSh); err != nil {
+		installSh = "install.sh"
+	}
+	if _, err := os.Stat(installSh); err == nil {
+		fmt.Println("Running installation script...")
+		cmd := exec.Command(installSh)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err == nil {
+			fmt.Printf("  %sOK%s    Installation script completed successfully.\n", c.Green, c.Reset)
+			return 0
+		}
+	}
+
+	fmt.Println("Rebuilding binary locally...")
+	targetBin := filepath.Join(home, ".local", "bin", "reta")
+	buildDir := retaRoot
+	if _, err := os.Stat(filepath.Join(".", "cmd", "reta")); err == nil {
+		buildDir, _ = os.Getwd()
+	}
+	buildCmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", targetBin, "./cmd/reta")
+	buildCmd.Dir = buildDir
+	buildCmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	buildCmd.Stdout = os.Stdout
+	buildCmd.Stderr = os.Stderr
+	if err := buildCmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "  %sERR%s   Build failed: %v\n", c.Red, c.Reset, err)
+		return 1
+	}
+	fmt.Printf("  %sOK%s    Rebuilt binary at %s\n", c.Green, c.Reset, targetBin)
+	return 0
+}
+
+func updateFromGitRepo(retaRoot string, pullOnly bool) int {
 	c := ui.Colors()
 	oldVer := strings.TrimSpace(reta.VersionRaw)
 	headCmd := exec.Command("git", "-C", retaRoot, "rev-parse", "HEAD")
@@ -83,6 +121,11 @@ func updateFromGitRepo(retaRoot string) int {
 			fmt.Fprintf(os.Stderr, "  %sERR%s   git pull --rebase failed. Run manually: cd ~/.reta && git pull --rebase\n", c.Red, c.Reset)
 		}
 		return 1
+	}
+
+	if pullOnly {
+		fmt.Printf("  %sOK%s    Pull completed successfully.\n", c.Green, c.Reset)
+		return 0
 	}
 
 	newHeadBytes, _ := exec.Command("git", "-C", retaRoot, "rev-parse", "HEAD").Output()
@@ -114,39 +157,7 @@ func updateFromGitRepo(retaRoot string) int {
 		}
 	}
 
-	if _, err := exec.LookPath("go"); err == nil {
-		if exePath, exeErr := os.Executable(); exeErr == nil {
-			if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
-				exePath = resolved
-			}
-			fmt.Println("\nRebuilding Go binary...")
-			tmpOut := exePath + ".new"
-			buildCmd := exec.Command("go", "build", "-trimpath", "-ldflags=-s -w", "-o", tmpOut, "./cmd/reta")
-			buildCmd.Dir = retaRoot
-			buildCmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-			buildCmd.Stdout = os.Stdout
-			buildCmd.Stderr = os.Stderr
-			if err := buildCmd.Run(); err != nil {
-				fmt.Fprintf(os.Stderr, "  %sERR%s   Failed to rebuild binary: %v\n", c.Red, c.Reset, err)
-				return 1
-			}
-			data, rErr := os.ReadFile(tmpOut)
-			_ = os.Remove(tmpOut)
-			if rErr != nil {
-				fmt.Fprintf(os.Stderr, "  %sERR%s   Failed to read built binary: %v\n", c.Red, c.Reset, rErr)
-				return 1
-			}
-			if repErr := replaceBinary(exePath, data); repErr != nil {
-				fmt.Fprintf(os.Stderr, "  %sERR%s   Failed to replace binary: %v\n", c.Red, c.Reset, repErr)
-				return 1
-			}
-			fmt.Printf("  %sOK%s    Updated binary at %s\n", c.Green, c.Reset, exePath)
-		}
-	} else {
-		fmt.Printf("\n  %sWARN%s  'go' not found on PATH; source updated, but binary was not rebuilt.\n", c.Yellow, c.Reset)
-		fmt.Println("         Run 'reta update --binary' to update the binary.")
-	}
-	return 0
+	return localReinstallAction()
 }
 
 func updateFromRelease(retaRoot string) int {
@@ -237,18 +248,33 @@ func updateFromRelease(retaRoot string) int {
 func RunUpdate(args []string) error {
 	parser := cli.NewParser()
 	var forceBinary bool
+	var pullOnly bool
+	var localReinstall bool
 	var showHelp bool
 	parser.Bool(&forceBinary, "binary", "")
+	parser.Bool(&pullOnly, "pull", "")
+	parser.Bool(&localReinstall, "local", "")
+	parser.Bool(&localReinstall, "install", "")
 	parser.Bool(&showHelp, "help", "h")
 
-	_, err := parser.Parse(args)
+	pos, err := parser.Parse(args)
 	if err != nil {
 		return err
 	}
 	if showHelp {
-		fmt.Println("Usage: reta update [--binary]")
+		fmt.Println("Usage: reta update [--binary] [--pull] [--local|--install]")
 		fmt.Println("")
-		fmt.Println("Pull latest changes in ~/.reta (git install) or update from GitHub Releases.")
+		fmt.Println("Pull latest changes in ~/.reta (git install) and run installer, or update from releases.")
+		fmt.Println("  --binary    Force update from prebuilt GitHub release binary")
+		fmt.Println("  --pull      Only pull git changes without running installer")
+		fmt.Println("  --local     Run local installer/rebuild without git pull")
+		return nil
+	}
+
+	if localReinstall || (len(pos) > 0 && pos[0] == "install") {
+		if code := localReinstallAction(); code != 0 {
+			return cli.Exit(code, "")
+		}
 		return nil
 	}
 
@@ -256,7 +282,7 @@ func RunUpdate(args []string) error {
 	retaRoot := filepath.Join(home, ".reta")
 	if !forceBinary {
 		if info, err := os.Stat(filepath.Join(retaRoot, ".git")); err == nil && info.IsDir() {
-			if code := updateFromGitRepo(retaRoot); code != 0 {
+			if code := updateFromGitRepo(retaRoot, pullOnly); code != 0 {
 				return cli.Exit(code, "")
 			}
 			return nil
