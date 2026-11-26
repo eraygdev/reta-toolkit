@@ -106,7 +106,7 @@ run_test() {
     TEST_TMP=$(mktemp -d)
 
     local output rc
-    output=$( ( set -e; cd "$TEST_TMP"; "$fn" ) 2>&1 )
+    output=$( ( set -e; cd "$TEST_TMP"; cd "$(pwd -P)"; "$fn" ) 2>&1 )
     rc=$?
 
     if [ "$rc" -eq 0 ]; then
