@@ -632,6 +632,111 @@ func decodeText(raw []byte) string {
 	return string(runes)
 }
 
+type tokenEstimate struct {
+	ChatGPT int64
+	Claude  int64
+	Gemini  int64
+}
+
+func estimateTokens(text string) tokenEstimate {
+	if len(text) == 0 {
+		return tokenEstimate{}
+	}
+
+	var gpt, claude, gemini float64
+	n := len(text)
+	for i := 0; i < n; {
+		b := text[i]
+
+		if b == '\n' || b == '\r' || b == ' ' || b == '\t' {
+			start := i
+			newlines := 0
+			for i < n && (text[i] == ' ' || text[i] == '\t' || text[i] == '\n' || text[i] == '\r') {
+				if text[i] == '\n' {
+					newlines++
+				}
+				i++
+			}
+			wsLen := i - start
+			if newlines == 0 && wsLen == 1 && b == ' ' {
+				continue
+			}
+			extraWS := wsLen - newlines
+			gpt += float64(newlines)*0.5 + float64(extraWS)/4.0
+			claude += float64(newlines)*0.65 + float64(extraWS)/3.2
+			gemini += float64(newlines)*0.9 + float64(extraWS)/2.2
+			continue
+		}
+
+		if (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_' {
+			start := i
+			subwords := 1
+			prevLower := b >= 'a' && b <= 'z'
+			i++
+			for i < n {
+				c := text[i]
+				isAlnum := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
+				if !isAlnum {
+					break
+				}
+				if c == '_' || (prevLower && c >= 'A' && c <= 'Z') {
+					subwords++
+				}
+				prevLower = c >= 'a' && c <= 'z'
+				i++
+			}
+			wLen := i - start
+			base := 1.0
+			if wLen > 5 {
+				base += float64(wLen-5) / 4.8
+			}
+			subScore := float64(subwords) * 0.7
+			if subScore > base {
+				gpt += base + (subScore-base)*0.35
+				claude += base + (subScore-base)*0.5
+				gemini += base + (subScore-base)*0.75
+			} else {
+				gpt += base
+				claude += base * 1.04
+				gemini += base * 1.08
+			}
+			continue
+		}
+
+		if b >= 0x80 {
+			_, size := utf8.DecodeRuneInString(text[i:])
+			if size <= 0 {
+				size = 1
+			}
+			i += size
+			gpt += 1.2
+			claude += 1.3
+			gemini += 1.4
+			continue
+		}
+
+		start := i
+		for i < n {
+			c := text[i]
+			if c >= 0x80 || c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
+				(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+				break
+			}
+			i++
+		}
+		pLen := i - start
+		gpt += 0.55 + float64(pLen)*0.4
+		claude += 0.60 + float64(pLen)*0.48
+		gemini += 0.65 + float64(pLen)*0.65
+	}
+
+	return tokenEstimate{
+		ChatGPT: int64(gpt + 0.5),
+		Claude:  int64(claude + 0.5),
+		Gemini:  int64(gemini + 0.5),
+	}
+}
+
 func Run(args []string) int {
 	rootArg := "."
 	dirArg := "exports"
@@ -871,10 +976,12 @@ func Run(args []string) int {
 	}
 
 	sizeMB := float64(total) / (1024 * 1024)
-	estTokens := int64(out.Len()) / 4
+	est := estimateTokens(out.String())
 	fmt.Println("\nDone.")
-	fmt.Printf("Files: %d included, %d skipped, %d dirs summarized, Total: %s (~%s tokens)\n",
-		written, len(skipped), len(summaries), humanSize(float64(total)), formatCommas(estTokens))
+	fmt.Printf("Files:  %d included, %d skipped, %d dirs summarized, Total: %s\n",
+		written, len(skipped), len(summaries), humanSize(float64(total)))
+	fmt.Printf("Tokens: ~%s ChatGPT | ~%s Claude | ~%s Gemini (estimated)\n",
+		formatCommas(est.ChatGPT), formatCommas(est.Claude), formatCommas(est.Gemini))
 	fmt.Printf("Output: %s\n", output)
 
 	if sizeMB > warnMB {

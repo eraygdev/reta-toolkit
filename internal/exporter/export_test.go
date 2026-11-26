@@ -136,3 +136,17 @@ func TestMatchesIgnoreDirAndFileDistinction(t *testing.T) {
 		t.Fatal("trailing-slash directory pattern must match directory")
 	}
 }
+
+func TestEstimateTokensCodeAndProse(t *testing.T) {
+	code := "func parseUserItems(rawInput string) ([]string, error) {\n\tif rawInput == \"\" {\n\t\treturn nil, nil\n\t}\n\treturn []string{rawInput}, nil\n}\n"
+	est := estimateTokens(code)
+	if est.ChatGPT <= 0 || est.Claude < est.ChatGPT || est.Gemini < est.Claude {
+		t.Fatalf("unexpected model token ordering for code: %+v", est)
+	}
+
+	prose := "The quick brown fox jumps over the lazy dog."
+	pEst := estimateTokens(prose)
+	if pEst.ChatGPT < 8 || pEst.ChatGPT > 14 {
+		t.Fatalf("unexpected prose token estimate: %+v", pEst)
+	}
+}

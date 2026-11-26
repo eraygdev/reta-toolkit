@@ -49,7 +49,8 @@ func RunShellInit(args []string) int {
 	case "powershell":
 		fmt.Print(`function rcd {
     param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Query)
-    $jumpFile = Join-Path $HOME ".cache\reta\last_path"
+    $userHome = if ($env:USERPROFILE) { $env:USERPROFILE } elseif ($env:HOME) { $env:HOME } else { $HOME }
+    $jumpFile = Join-Path $userHome ".cache\reta\last_path"
     if (Test-Path $jumpFile) { Remove-Item $jumpFile -Force }
     & reta search @Query
     if ($LASTEXITCODE -ne 0) { return }
