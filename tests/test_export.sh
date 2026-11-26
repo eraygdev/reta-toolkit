@@ -5,7 +5,7 @@ test_export_defaults_to_exports_dir() {
     mkdir -p proj
     echo "print('hello')" > proj/app.py
 
-    "$RETA_ROOT/lib/export-context" -r proj >/dev/null
+    "$RETA_BIN" export -r proj >/dev/null
     assert_file_exists proj/exports/project_export.md
     assert_file_not_exists proj/project_export.md
 }
@@ -14,7 +14,7 @@ test_export_dir_dot_writes_to_root() {
     mkdir -p proj
     echo "print('hello')" > proj/app.py
 
-    "$RETA_ROOT/lib/export-context" -r proj --dir . >/dev/null
+    "$RETA_BIN" export -r proj --dir . >/dev/null
     assert_file_exists proj/project_export.md
     assert_file_not_exists proj/exports/project_export.md
 }
@@ -24,7 +24,7 @@ test_clean_regenerates_export_in_custom_dir() {
     echo "OLD_CONTENT" > proj/custom_out/project_export.md
     echo "print('new')" > proj/app.py
 
-    "$RETA_ROOT/lib/export-context" -r proj --dir custom_out --clean >/dev/null
+    "$RETA_BIN" export -r proj --dir custom_out --clean >/dev/null
     assert_file_exists proj/custom_out/project_export.md
     local content
     content=$(cat proj/custom_out/project_export.md)
@@ -37,7 +37,7 @@ test_clean_exports_refuses_non_exports_dir() {
     echo "keep" > proj/custom_out/project_export.md
     echo "print('hi')" > proj/app.py
 
-    assert_exit_code 1 "$RETA_ROOT/lib/export-context" -r proj --dir custom_out --clean-exports
+    assert_exit_code 1 "$RETA_BIN" export -r proj --dir custom_out --clean-exports
     assert_file_exists proj/custom_out/project_export.md
 }
 
@@ -46,7 +46,7 @@ test_clean_exports_refuses_when_project_root_named_exports() {
     echo "keep" > exports/exports/project_export.md
     echo "print('hi')" > exports/app.py
 
-    assert_exit_code 1 "$RETA_ROOT/lib/export-context" -r exports --dir exports --clean-exports
+    assert_exit_code 1 "$RETA_BIN" export -r exports --dir exports --clean-exports
     assert_file_exists exports/exports/project_export.md
 }
 
@@ -57,7 +57,7 @@ test_clean_exports_clears_files_and_keeps_dir() {
     echo "print('hi')" > proj/app.py
 
     local out
-    out=$(printf "y\n" | "$RETA_ROOT/lib/export-context" -r proj --clean-exports 2>&1)
+    out=$(printf "y\n" | "$RETA_BIN" export -r proj --clean-exports 2>&1)
     assert_contains "$out" "2 file(s)"
     assert_file_not_exists proj/exports/project_export.md
     assert_file_not_exists proj/exports/sub/extra.txt

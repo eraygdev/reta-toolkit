@@ -7,7 +7,7 @@ APP_KEY=GENERATE_SECRET
 JWT_SECRET=GENERATE_SECRET
 EOF
 
-    "$RETA_ROOT/libexec/reta-init-env" >/dev/null
+    "$RETA_BIN" init-env >/dev/null
 
     assert_file_exists .env
     local content
@@ -23,7 +23,7 @@ test_init_env_refuses_overwrite() {
     echo "APP_KEY=x" > .env.example
     echo "APP_KEY=existing" > .env
 
-    assert_exit_code 1 "$RETA_ROOT/libexec/reta-init-env"
+    assert_exit_code 1 "$RETA_BIN" init-env
 
     local content
     content=$(cat .env)
@@ -34,7 +34,7 @@ test_init_env_force_overwrites() {
     echo "APP_KEY=x" > .env.example
     echo "APP_KEY=existing" > .env
 
-    "$RETA_ROOT/libexec/reta-init-env" --force >/dev/null
+    "$RETA_BIN" init-env --force >/dev/null
 
     local content
     content=$(cat .env)
@@ -42,7 +42,7 @@ test_init_env_force_overwrites() {
 }
 
 test_init_env_missing_template() {
-    assert_exit_code 1 "$RETA_ROOT/libexec/reta-init-env"
+    assert_exit_code 1 "$RETA_BIN" init-env
 }
 
 run_test "reta init-env generates secrets"    test_init_env_generates_secrets

@@ -13,13 +13,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          python-version: "3.10"
+          go-version-file: go.mod
 
-      - name: Install dependencies (bcrypt for init-env tests)
-        run: pip install bcrypt
+      - name: Verify cross-platform builds
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build ./cmd/reta
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build ./cmd/reta
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ./cmd/reta
+          rm -f reta reta.exe
 
       - name: Run test suite
         run: ./tests/run.sh
+
+  go-unit-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Go unit tests
+        run: go test -v ./...

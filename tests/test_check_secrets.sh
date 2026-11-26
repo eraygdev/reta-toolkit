@@ -5,7 +5,7 @@ test_check_secrets_clean_repo_exits_0() {
     echo ".env" > .gitignore
     echo "print('hello')" > app.py
 
-    assert_exit_code 0 "$RETA_ROOT/lib/check-secrets"
+    assert_exit_code 0 "$RETA_BIN" check-secrets
 }
 
 test_check_secrets_detects_leaked_key_exits_1() {
@@ -16,7 +16,7 @@ test_check_secrets_detects_leaked_key_exits_1() {
 
     local out
     set +e
-    out=$(NO_COLOR=1 "$RETA_ROOT/lib/check-secrets" 2>&1)
+    out=$(NO_COLOR=1 "$RETA_BIN" check-secrets 2>&1)
     local rc=$?
     set -e
 
@@ -31,7 +31,7 @@ test_check_secrets_respects_ignore_marker() {
     local p2="IOSFODNN7EXAMPLE"
     echo "KEY = \"${p1}${p2}\"  # check-secrets: ignore" > app.py
 
-    assert_exit_code 0 "$RETA_ROOT/lib/check-secrets"
+    assert_exit_code 0 "$RETA_BIN" check-secrets
 }
 
 test_check_secrets_skips_env_example() {
@@ -40,7 +40,7 @@ test_check_secrets_skips_env_example() {
     local p2="SyDummyKeyForExampleTemplate1234567890"
     echo "GEMINI_API_KEY=${p1}${p2}" > .env.example
 
-    assert_exit_code 0 "$RETA_ROOT/lib/check-secrets"
+    assert_exit_code 0 "$RETA_BIN" check-secrets
 }
 
 test_check_secrets_warns_when_env_missing_from_gitignore() {
@@ -48,7 +48,7 @@ test_check_secrets_warns_when_env_missing_from_gitignore() {
     echo "print('ok')" > app.py
 
     local out
-    out=$(NO_COLOR=1 "$RETA_ROOT/lib/check-secrets" 2>&1)
+    out=$(NO_COLOR=1 "$RETA_BIN" check-secrets 2>&1)
     assert_contains "$out" "WARN"
     assert_contains "$out" ".env is not listed in .gitignore"
 }
@@ -63,7 +63,7 @@ test_check_secrets_fails_when_env_tracked_by_git() {
 
     local out
     set +e
-    out=$(NO_COLOR=1 "$RETA_ROOT/lib/check-secrets" 2>&1)
+    out=$(NO_COLOR=1 "$RETA_BIN" check-secrets 2>&1)
     local rc=$?
     set -e
 

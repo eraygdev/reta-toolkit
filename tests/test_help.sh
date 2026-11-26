@@ -3,7 +3,7 @@
 
 test_help_lists_all_subcommands() {
     local out
-    out=$("$RETA_ROOT/bin/reta" help 2>&1)
+    out=$("$RETA_BIN" help 2>&1)
     assert_contains "$out" "doctor"
     assert_contains "$out" "init"
     assert_contains "$out" "port"
@@ -12,25 +12,25 @@ test_help_lists_all_subcommands() {
 
 test_help_subcommand_delegates() {
     local out
-    out=$("$RETA_ROOT/bin/reta" help port 2>&1)
+    out=$("$RETA_BIN" help port 2>&1)
     assert_contains "$out" "list"
     assert_contains "$out" "kill"
 }
 
 test_help_unknown_subcommand() {
-    assert_exit_code 1 "$RETA_ROOT/bin/reta" help nonexistent
+    assert_exit_code 1 "$RETA_BIN" help nonexistent
 }
 
 test_version_flag() {
     local out expected
-    out=$("$RETA_ROOT/bin/reta" --version 2>&1)
+    out=$("$RETA_BIN" --version 2>&1)
     expected=$(cat "$RETA_ROOT/VERSION")
     assert_eq "$expected" "$out"
 }
 
 test_help_respects_setup_order() {
     local out
-    out=$(NO_COLOR=1 "$RETA_ROOT/bin/reta" help 2>&1)
+    out=$(NO_COLOR=1 "$RETA_BIN" help 2>&1)
     python3 -c '
 import sys
 out = sys.stdin.read()

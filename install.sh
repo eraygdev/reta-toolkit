@@ -1,103 +1,98 @@
 #!/usr/bin/env bash
 set -euo pipefail
-shopt -s nullglob
 
 RETA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET="$HOME/.local/bin"
 
-# shellcheck source=lib/ui.sh
-source "$RETA_DIR/lib/ui.sh"
-
-echo "reta installer"
+echo "reta installer (Go)"
 echo "Source: $RETA_DIR"
 echo ""
 
+if ! command -v go >/dev/null 2>&1; then
+    echo "Error: 'go' is required to build from source." >&2
+    echo "Or install prebuilt binary via: curl -fsSL https://raw.githubusercontent.com/eraygdev/reta-toolkit/main/scripts/install.sh | sh" >&2
+    exit 1
+fi
+
 mkdir -p "$TARGET"
 
-# 1. ~/.reta symlink (skipped if the repo already lives there)
 if [ "$RETA_DIR" = "$HOME/.reta" ]; then
-    ui_ok "already installed at ~/.reta"
+    echo "  OK    already at ~/.reta"
 else
     if [ -L "$HOME/.reta" ]; then
         rm -f "$HOME/.reta"
     elif [ -e "$HOME/.reta" ]; then
-        ui_err "~/.reta exists but is not a symlink."
-        echo "       Move or remove it manually, then re-run." >&2
+        echo "  ERR   ~/.reta exists but is not a symlink." >&2
         exit 1
     fi
     ln -sfn "$RETA_DIR" "$HOME/.reta"
-    ui_ok "~/.reta -> $RETA_DIR"
+    echo "  OK    ~/.reta -> $RETA_DIR"
 fi
 
-# 2. Broken symlink cleanup (only links pointing into ~/.reta)
-broken=0
-for link in "$TARGET"/*; do
-    [ -L "$link" ] || continue
-    t="$(readlink "$link" 2>/dev/null || true)"
-    case "$t" in
-        "$HOME/.reta"/*|"$RETA_DIR"/*)
-            if [ ! -e "$t" ]; then
-                rm -f "$link"
-                ui_ok "cleaned broken: $(basename "$link")"
-                broken=$((broken+1))
-            fi
-            ;;
-    esac
-done
+echo "Building Go binary..."
+rm -f "$TARGET/reta"
+(cd "$RETA_DIR" && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "$TARGET/reta" ./cmd/reta)
+chmod +x "$TARGET/reta"
+echo "  OK    installed $TARGET/reta"
 
-# 3. Set executable bits
-chmod +x "$RETA_DIR/bin"/* 2>/dev/null || true
-chmod +x "$RETA_DIR/libexec"/* 2>/dev/null || true
-chmod +x "$RETA_DIR/lib/export-context" 2>/dev/null || true
-chmod +x "$RETA_DIR/lib/check-secrets" 2>/dev/null || true
-chmod +x "$RETA_DIR/lib/adopt-makefile" 2>/dev/null || true
-chmod +x "$RETA_DIR/tests/run.sh" 2>/dev/null || true
-
-# 4. Only 'reta' goes onto PATH
-[ -L "$TARGET/reta" ] && rm -f "$TARGET/reta"
-ln -sf "$RETA_DIR/bin/reta" "$TARGET/reta"
-ui_ok "reta -> $RETA_DIR/bin/reta"
-
-# 5. PATH check
 case ":$PATH:" in
     *":$TARGET:"*)
-        ui_ok "$TARGET is on PATH"
+        echo "  OK    $TARGET is on PATH"
         ;;
     *)
         echo ""
-        ui_warn "$TARGET is not on PATH. Add to ~/.zshrc or ~/.bashrc:"
-        echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
-        echo "Then: source ~/.zshrc"
+        echo "  WARN  $TARGET is not on PATH. Add to ~/.zshrc or ~/.bashrc:"
+        echo "        export PATH=\"\$HOME/.local/bin:\$PATH\""
         ;;
 esac
 
-# 6. Shell completion (best-effort, never aborts install)
 echo ""
 echo "Shell completion:"
 BASH_COMPLETION_DIR="$HOME/.local/share/bash-completion/completions"
-ZSH_COMPLETION_DIR="$HOME/.zfunc"
+mkdir -p "$BASH_COMPLETION_DIR"
+rm -f "$BASH_COMPLETION_DIR/reta"
+"$TARGET/reta" completion bash > "$BASH_COMPLETION_DIR/reta"
+echo "  OK    bash: $BASH_COMPLETION_DIR/reta"
 
-if [ -f "$RETA_DIR/lib/completion.bash" ]; then
-    mkdir -p "$BASH_COMPLETION_DIR"
-    ln -sfn "$RETA_DIR/lib/completion.bash" "$BASH_COMPLETION_DIR/reta"
-    ui_ok "bash: $BASH_COMPLETION_DIR/reta"
-fi
-
-if [ -f "$RETA_DIR/lib/completion.zsh" ] && command -v zsh >/dev/null 2>&1; then
+if command -v zsh >/dev/null 2>&1; then
+    ZSH_COMPLETION_DIR="$HOME/.zfunc"
     mkdir -p "$ZSH_COMPLETION_DIR"
-    ln -sfn "$RETA_DIR/lib/completion.zsh" "$ZSH_COMPLETION_DIR/_reta"
-    ui_ok "zsh:  $ZSH_COMPLETION_DIR/_reta"
+    rm -f "$ZSH_COMPLETION_DIR/_reta"
+    "$TARGET/reta" completion zsh > "$ZSH_COMPLETION_DIR/_reta"
+    echo "  OK    zsh:  $ZSH_COMPLETION_DIR/_reta"
     if ! grep -qs "fpath.*\.zfunc" "$HOME/.zshrc" 2>/dev/null; then
-        ui_warn "zsh: add to ~/.zshrc:"
-        echo "      fpath+=~/.zfunc"
-        echo "      autoload -Uz compinit && compinit"
+        echo "  WARN  zsh: add 'fpath+=~/.zfunc' and 'autoload -Uz compinit && compinit' to ~/.zshrc"
     fi
 fi
 
+RCD_START="# ===RETA*==="
+RCD_END="# ==========="
+RCD_BLOCK='# ===RETA*===
+command -v reta >/dev/null 2>&1 && eval "$(reta shell-init)"
+# ==========='
+
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    [ -f "$rc" ] || continue
+    if grep -Fqsx "$RCD_START" "$rc" 2>/dev/null; then
+        tmp="$(mktemp)"
+        awk -v start="$RCD_START" -v end="$RCD_END" -v block="$RCD_BLOCK" '
+            $0 == start { print block; skip = 1; next }
+            skip && $0 == end { skip = 0; next }
+            !skip { print }
+        ' "$rc" > "$tmp"
+        if ! cmp -s "$tmp" "$rc"; then
+            cat "$tmp" > "$rc"
+            echo "  OK    updated rcd block in $rc"
+        else
+            echo "  OK    rcd block up to date in $rc"
+        fi
+        rm -f "$tmp"
+    else
+        printf '\n%s\n' "$RCD_BLOCK" >> "$rc"
+        echo "  OK    added rcd block to $rc"
+    fi
+done
+
 echo ""
-ui_ok "reta installed"
-ui_next_steps \
-    "reta doctor       Verify installation health" \
-    "reta help         List all available commands" \
-    "reta init         Scaffold templates into a new project" \
-    "reta init-env     Generate .env from .env.example"
+echo "  OK    reta installed"
+"$TARGET/reta" doctor || true

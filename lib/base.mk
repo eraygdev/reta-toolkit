@@ -1,4 +1,4 @@
-COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+COMPOSE = $(eval COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose"))$(COMPOSE)
 
 # ═══════════════════════════════════════════════════════════
 # reta / lib/base.mk
@@ -11,11 +11,18 @@ SHELL := /bin/bash
 DIR ?= exports
 SRC ?= .
 
+LEARN ?= $(shell if [ "$${RETA_LEARN:-}" = "on" ]; then echo on; elif [ "$${RETA_LEARN:-}" = "off" ]; then echo off; elif [ -f $(HOME)/.config/reta/config ] && grep -qs '^learn=on' $(HOME)/.config/reta/config; then echo on; else echo off; fi)
+ifeq ($(LEARN),on)
+SHOW_CMD = @printf "  \033[2mCommand: %s\033[0m\n" "$(1)"
+else
+SHOW_CMD = @:
+endif
+
 # === Help ===
 
 help:  ## Show all targets (base + project)
 	@echo "Available targets:"
-	@awk -v dir="$(DIR)" 'BEGIN {FS = ":.*?## "; pending = ""} \
+	@awk -v dir="$(DIR)" 'BEGIN {FS = ":([^=][^#]*)?## "; pending = ""} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
@@ -23,7 +30,7 @@ help:  ## Show all targets (base + project)
 	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	  /^[a-zA-Z0-9_.-]+:([^=][^#]*)?## / { \
 	    if (pending != "") { \
 	      print ""; \
 	      printf "  \033[1;33m%s\033[0m\n", pending; \
@@ -33,7 +40,7 @@ help:  ## Show all targets (base + project)
 	    gsub(/\$$\(DIR\)/, dir, desc); \
 	    printf "  \033[36m%-18s\033[0m %s\n", $$1, desc \
 	  }' $(HOME)/.reta/lib/base.mk
-	@proj=$$(awk 'BEGIN {FS = ":.*?## "; pending = ""; first = 1} \
+	@proj=$$(awk 'BEGIN {FS = ":([^=][^#]*)?## "; pending = ""; first = 1} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
@@ -41,7 +48,7 @@ help:  ## Show all targets (base + project)
 	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	  /^[a-zA-Z0-9_.-]+:([^=][^#]*)?## / { \
 	    if (pending != "") { \
 	      print ""; \
 	      printf "  \033[1;33m%s\033[0m\n", pending; \
@@ -62,7 +69,7 @@ help:  ## Show all targets (base + project)
 
 help-base:  ## Show only base targets
 	@echo "Base targets:"
-	@awk -v dir="$(DIR)" 'BEGIN {FS = ":.*?## "; pending = ""} \
+	@awk -v dir="$(DIR)" 'BEGIN {FS = ":([^=][^#]*)?## "; pending = ""} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
@@ -70,7 +77,7 @@ help-base:  ## Show only base targets
 	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	  /^[a-zA-Z0-9_.-]+:([^=][^#]*)?## / { \
 	    if (pending != "") { \
 	      print ""; \
 	      printf "  \033[1;33m%s\033[0m\n", pending; \
@@ -83,7 +90,7 @@ help-base:  ## Show only base targets
 
 help-project:  ## Show only project-specific targets
 	@echo "Project-specific targets:"
-	@awk 'BEGIN {FS = ":.*?## "; pending = ""} \
+	@awk 'BEGIN {FS = ":([^=][^#]*)?## "; pending = ""} \
 	  /^# === / { \
 	    line = $$0; \
 	    sub(/^# === /, "", line); \
@@ -91,7 +98,7 @@ help-project:  ## Show only project-specific targets
 	    pending = line; \
 	    next \
 	  } \
-	  /^[a-zA-Z0-9_.-]+:.*?## / { \
+	  /^[a-zA-Z0-9_.-]+:([^=][^#]*)?## / { \
 	    if (pending != "") { \
 	      print ""; \
 	      printf "  \033[1;33m%s\033[0m\n", pending; \
@@ -103,18 +110,23 @@ help-project:  ## Show only project-specific targets
 # === Docker ===
 
 up:  ## Start the stack
+	$(call SHOW_CMD,$(COMPOSE) up -d)
 	@$(COMPOSE) up -d
 
 down:  ## Stop the stack
+	$(call SHOW_CMD,$(COMPOSE) down)
 	@$(COMPOSE) down
 
 restart:  ## Restart services
+	$(call SHOW_CMD,$(COMPOSE) restart)
 	@$(COMPOSE) restart
 
 rebuild:  ## Rebuild and restart (force-recreate)
+	$(call SHOW_CMD,$(COMPOSE) up -d --build --force-recreate)
 	@$(COMPOSE) up -d --build --force-recreate
 
 ps:  ## Show service status
+	$(call SHOW_CMD,$(COMPOSE) ps)
 	@$(COMPOSE) ps
 
 sh:  ## Open shell in a container (make sh SERVICE=api)
@@ -125,14 +137,17 @@ sh:  ## Open shell in a container (make sh SERVICE=api)
 		$(COMPOSE) config --services 2>/dev/null | sed 's/^/  - /' || echo "  ($(COMPOSE) config unavailable)"; \
 		exit 1; \
 	fi
+	$(call SHOW_CMD,$(COMPOSE) exec $(SERVICE) sh)
 	@$(COMPOSE) exec $(SERVICE) sh
 
 # === Logs ===
 
 logs:  ## Stream logs (this terminal)
+	$(call SHOW_CMD,$(COMPOSE) logs -f --tail 50)
 	@$(COMPOSE) logs -f --tail 50
 
 logs-all:  ## Stream logs from all services (no prefix)
+	$(call SHOW_CMD,$(COMPOSE) logs --no-log-prefix -f --tail 50)
 	@$(COMPOSE) logs --no-log-prefix -f --tail 50
 
 logs-t:  ## Stream logs in a new terminal tab
@@ -162,6 +177,7 @@ clean:  ## Remove Python caches
 	@echo "Cache cleaned."
 
 clean-docker:  ## Safe docker prune (volumes preserved)
+	$(call SHOW_CMD,docker builder prune -f && docker image prune -f && docker container prune -f)
 	@docker builder prune -f
 	@docker image prune -f
 	@docker container prune -f
@@ -170,62 +186,81 @@ clean-docker:  ## Safe docker prune (volumes preserved)
 # === Export ===
 
 export:  ## Export source for AI context (DIR=$(DIR))
-	@if [ ! -x "$(HOME)/.reta/lib/export-context" ]; then \
-		echo "Error: export-context not found at ~/.reta/lib/export-context"; \
-		exit 1; \
-	fi
-	@if [ "$(SRC)" = "." ]; then \
-		$(HOME)/.reta/lib/export-context --dir "$(DIR)"; \
-	elif [ "$(DIR)" = "." ]; then \
-		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/project_export.md"; \
-	elif [[ "$(DIR)" = /* ]]; then \
-		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(DIR)/project_export.md"; \
+	@if command -v reta >/dev/null 2>&1 && reta export --help >/dev/null 2>&1; then \
+		EXPORTER="reta export"; \
+	elif [ -x "$(HOME)/.reta/lib/export-context" ]; then \
+		EXPORTER="$(HOME)/.reta/lib/export-context"; \
 	else \
-		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/$(DIR)/project_export.md"; \
+		echo "Error: export-context not found"; \
+		exit 1; \
+	fi; \
+	if [ "$(SRC)" = "." ]; then \
+		$$EXPORTER --dir "$(DIR)"; \
+	elif [ "$(DIR)" = "." ]; then \
+		$$EXPORTER -r "$(SRC)" -o "$(CURDIR)/project_export.md"; \
+	else \
+		case "$(DIR)" in \
+			/*) $$EXPORTER -r "$(SRC)" -o "$(DIR)/project_export.md" ;; \
+			*)  $$EXPORTER -r "$(SRC)" -o "$(CURDIR)/$(DIR)/project_export.md" ;; \
+		esac; \
 	fi
 
 clean-export:  ## Remove old export and regenerate (DIR=$(DIR))
-	@if [ ! -x "$(HOME)/.reta/lib/export-context" ]; then \
-		echo "Error: export-context not found at ~/.reta/lib/export-context"; \
-		exit 1; \
-	fi
-	@if [ "$(SRC)" = "." ]; then \
-		$(HOME)/.reta/lib/export-context --dir "$(DIR)" --clean; \
-	elif [ "$(DIR)" = "." ]; then \
-		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/project_export.md" --clean; \
-	elif [[ "$(DIR)" = /* ]]; then \
-		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(DIR)/project_export.md" --clean; \
+	@if command -v reta >/dev/null 2>&1 && reta export --help >/dev/null 2>&1; then \
+		EXPORTER="reta export"; \
+	elif [ -x "$(HOME)/.reta/lib/export-context" ]; then \
+		EXPORTER="$(HOME)/.reta/lib/export-context"; \
 	else \
-		$(HOME)/.reta/lib/export-context -r "$(SRC)" -o "$(CURDIR)/$(DIR)/project_export.md" --clean; \
+		echo "Error: export-context not found"; \
+		exit 1; \
+	fi; \
+	if [ "$(SRC)" = "." ]; then \
+		$$EXPORTER --dir "$(DIR)" --clean; \
+	elif [ "$(DIR)" = "." ]; then \
+		$$EXPORTER -r "$(SRC)" -o "$(CURDIR)/project_export.md" --clean; \
+	else \
+		case "$(DIR)" in \
+			/*) $$EXPORTER -r "$(SRC)" -o "$(DIR)/project_export.md" --clean ;; \
+			*)  $$EXPORTER -r "$(SRC)" -o "$(CURDIR)/$(DIR)/project_export.md" --clean ;; \
+		esac; \
 	fi
 
 clean-exports:  ## Delete all files inside exports/ (with confirmation)
-	@if [ ! -x "$(HOME)/.reta/lib/export-context" ]; then \
-		echo "Error: export-context not found at ~/.reta/lib/export-context"; \
+	@if command -v reta >/dev/null 2>&1 && reta export --help >/dev/null 2>&1; then \
+		reta export --dir "$(DIR)" --clean-exports; \
+	elif [ -x "$(HOME)/.reta/lib/export-context" ]; then \
+		$(HOME)/.reta/lib/export-context --dir "$(DIR)" --clean-exports; \
+	else \
+		echo "Error: export-context not found"; \
 		exit 1; \
 	fi
-	@$(HOME)/.reta/lib/export-context --dir "$(DIR)" --clean-exports
 
 # === Git ===
 
 git-sync:  ## Fetch, rebase, delete gone branches
+	$(call SHOW_CMD,git fetch --prune && git pull --rebase)
 	@git fetch --prune
 	@git pull --rebase
-	@git branch -vv | grep ': gone]' | awk '{print $$1}' | xargs -r git branch -D 2>/dev/null || \
-	 git branch -vv | grep ': gone]' | awk '{print $$1}' | xargs git branch -D 2>/dev/null || true
+	@git branch -vv | awk '/: gone\]/ { if ($$1 == "*" || $$1 == "+") next; print $$1 }' | xargs -r git branch -D 2>/dev/null || \
+	 git branch -vv | awk '/: gone\]/ { if ($$1 == "*" || $$1 == "+") next; print $$1 }' | xargs git branch -D 2>/dev/null || true
 	@echo "Sync complete."
 
 git-status:  ## Short git status
+	$(call SHOW_CMD,git status -sb)
 	@git status -sb
 
 # === Security ===
 
 check-secrets:  ## Scan repo for tracked .env files and leaked secrets
-	@if [ ! -x "$(HOME)/.reta/lib/check-secrets" ]; then \
-		echo "Error: check-secrets not found at ~/.reta/lib/check-secrets"; \
+	$(call SHOW_CMD,reta check-secrets)
+	@if command -v reta >/dev/null 2>&1 && reta check-secrets --help >/dev/null 2>&1; then \
+		reta check-secrets; \
+	elif [ -x "$(HOME)/.reta/lib/check-secrets" ]; then \
+		$(HOME)/.reta/lib/check-secrets; \
+	else \
+		echo "Error: check-secrets not found"; \
 		exit 1; \
 	fi
-	@$(HOME)/.reta/lib/check-secrets
 
 # --- PHONY ---
 
