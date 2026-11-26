@@ -13,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -927,96 +928,43 @@ func estimateTokens(text string) tokenEstimate {
 	}
 }
 
-func Run(args []string) int {
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var showHelp bool
+	var cleanFlag bool
+	var cleanExportsFlag bool
 	rootArg := "."
 	dirArg := "exports"
 	outputArg := ""
 	maxSizeStr := "2M"
 	var includeArgs []string
-	warnMB := 0.8
-	cleanFlag := false
-	cleanExportsFlag := false
+	warnMBStr := "0.8"
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
-		case "--clean":
-			cleanFlag = true
-		case "--clean-exports":
-			cleanExportsFlag = true
-		case "-r", "--root":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "Error: %s requires an argument.\n", arg)
-				return 2
-			}
-			i++
-			rootArg = args[i]
-		case "-d", "--dir":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "Error: %s requires an argument.\n", arg)
-				return 2
-			}
-			i++
-			dirArg = args[i]
-		case "-o", "--output":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "Error: %s requires an argument.\n", arg)
-				return 2
-			}
-			i++
-			outputArg = args[i]
-		case "--max-size":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "Error: --max-size requires an argument.")
-				return 2
-			}
-			i++
-			maxSizeStr = args[i]
-		case "--include":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "Error: --include requires an argument.")
-				return 2
-			}
-			i++
-			includeArgs = append(includeArgs, args[i])
-		case "--warn-mb":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "Error: --warn-mb requires an argument.")
-				return 2
-			}
-			i++
-			v, err := strconv.ParseFloat(args[i], 64)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: invalid --warn-mb value: %s\n", args[i])
-				return 2
-			}
-			warnMB = v
-		default:
-			if strings.HasPrefix(arg, "--root=") {
-				rootArg = strings.TrimPrefix(arg, "--root=")
-			} else if strings.HasPrefix(arg, "--dir=") {
-				dirArg = strings.TrimPrefix(arg, "--dir=")
-			} else if strings.HasPrefix(arg, "--output=") {
-				outputArg = strings.TrimPrefix(arg, "--output=")
-			} else if strings.HasPrefix(arg, "--max-size=") {
-				maxSizeStr = strings.TrimPrefix(arg, "--max-size=")
-			} else if strings.HasPrefix(arg, "--include=") {
-				includeArgs = append(includeArgs, strings.TrimPrefix(arg, "--include="))
-			} else if strings.HasPrefix(arg, "--warn-mb=") {
-				v, err := strconv.ParseFloat(strings.TrimPrefix(arg, "--warn-mb="), 64)
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error: invalid --warn-mb value.\n")
-					return 2
-				}
-				warnMB = v
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-				return 2
-			}
-		}
+	parser.Bool(&showHelp, "help", "h")
+	parser.Bool(&cleanFlag, "clean", "")
+	parser.Bool(&cleanExportsFlag, "clean-exports", "")
+	parser.String(&rootArg, "root", "r")
+	parser.String(&dirArg, "dir", "d")
+	parser.String(&outputArg, "output", "o")
+	parser.String(&maxSizeStr, "max-size", "")
+	parser.StringSlice(&includeArgs, "include", "")
+	parser.String(&warnMBStr, "warn-mb", "")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printHelp()
+		return nil
+	}
+	if len(pos) > 0 {
+		return cli.Exit(2, "unexpected argument: %s", pos[0])
+	}
+
+	warnMB, err := strconv.ParseFloat(warnMBStr, 64)
+	if err != nil {
+		return cli.Exit(2, "invalid --warn-mb value: %s", warnMBStr)
 	}
 
 	root := resolveAbs(rootArg)
@@ -1028,21 +976,23 @@ func Run(args []string) int {
 	}
 	maxSize, err := parseSize(maxSizeStr)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: invalid --max-size '%s': %v\n", maxSizeStr, err)
-		return 2
+		return cli.Exit(2, "invalid --max-size '%s': %v", maxSizeStr, err)
 	}
 
 	if cleanExportsFlag {
-		return cleanExportsDir(root, filepath.Dir(output))
+		if code := cleanExportsDir(root, filepath.Dir(output)); code != 0 {
+			return cli.Exit(code, "")
+		}
+		return nil
 	}
 
 	if isDangerousPath(root) {
 		fmt.Printf("Refusing to scan protected path: %s\n", root)
-		return 1
+		return cli.Exit(1, "")
 	}
 	if _, err := os.Stat(root); err != nil {
 		fmt.Printf("Root not found: %s\n", root)
-		return 1
+		return cli.Exit(1, "")
 	}
 
 	if cleanFlag {
@@ -1066,7 +1016,7 @@ func Run(args []string) int {
 	files, skipped, summaries := scanProject(root, includeArgs, exportignore, output)
 	if len(files) == 0 {
 		fmt.Println("No matching files.")
-		return 1
+		return cli.Exit(1, "")
 	}
 
 	fmt.Printf("Found %d files (%d skipped, %d dirs summarized). Writing...\n\n", len(files), len(skipped), len(summaries))
@@ -1098,8 +1048,7 @@ func Run(args []string) int {
 	})
 
 	if err := os.MkdirAll(filepath.Dir(output), 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating output dir: %v\n", err)
-		return 1
+		return cli.Wrap(1, err, "creating output dir")
 	}
 
 	var out bytes.Buffer
@@ -1161,8 +1110,7 @@ func Run(args []string) int {
 	}
 
 	if err := os.WriteFile(output, out.Bytes(), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", output, err)
-		return 1
+		return cli.Wrap(1, err, "writing %s", output)
 	}
 
 	sizeMB := float64(total) / (1024 * 1024)
@@ -1178,5 +1126,5 @@ func Run(args []string) int {
 		fmt.Printf("\nWarning: %.2f MB exceeds %.1f MB threshold.\n", sizeMB, warnMB)
 		fmt.Println("Add .exportignore rules or narrow with --include.")
 	}
-	return 0
+	return nil
 }

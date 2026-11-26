@@ -13,6 +13,7 @@ import (
 	"time"
 
 	reta "github.com/eraygdev/reta-toolkit"
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/doctor"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
@@ -233,53 +234,61 @@ func updateFromRelease(retaRoot string) int {
 	return 0
 }
 
-func RunUpdate(args []string) int {
-	forceBinary := false
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			fmt.Println("Usage: reta update [--binary]")
-			fmt.Println("")
-			fmt.Println("Pull latest changes in ~/.reta (git install) or update from GitHub Releases.")
-			return 0
-		case "--binary":
-			forceBinary = true
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-			return 1
-		}
+func RunUpdate(args []string) error {
+	parser := cli.NewParser()
+	var forceBinary bool
+	var showHelp bool
+	parser.Bool(&forceBinary, "binary", "")
+	parser.Bool(&showHelp, "help", "h")
+
+	_, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		fmt.Println("Usage: reta update [--binary]")
+		fmt.Println("")
+		fmt.Println("Pull latest changes in ~/.reta (git install) or update from GitHub Releases.")
+		return nil
 	}
 
 	home, _ := os.UserHomeDir()
 	retaRoot := filepath.Join(home, ".reta")
 	if !forceBinary {
 		if info, err := os.Stat(filepath.Join(retaRoot, ".git")); err == nil && info.IsDir() {
-			return updateFromGitRepo(retaRoot)
+			if code := updateFromGitRepo(retaRoot); code != 0 {
+				return cli.Exit(code, "")
+			}
+			return nil
 		}
 	}
-	return updateFromRelease(retaRoot)
+	if code := updateFromRelease(retaRoot); code != 0 {
+		return cli.Exit(code, "")
+	}
+	return nil
 }
 
-func RunUninstall(args []string) int {
-	keepSource := false
-	assumeYes := false
+func RunUninstall(args []string) error {
+	parser := cli.NewParser()
+	var keepSource bool
+	var assumeYes bool
+	var showHelp bool
 
-	for _, arg := range args {
-		switch arg {
-		case "--keep", "--keep-source":
-			keepSource = true
-		case "-y", "--yes":
-			assumeYes = true
-		case "-h", "--help":
-			fmt.Println("Usage: reta uninstall [--keep] [-y]")
-			fmt.Println("")
-			fmt.Println("  --keep       Remove only the PATH binary/symlink; keep ~/.reta")
-			fmt.Println("  -y, --yes    Skip confirmation prompts")
-			return 0
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-			return 1
-		}
+	parser.Bool(&keepSource, "keep", "")
+	parser.Bool(&keepSource, "keep-source", "")
+	parser.Bool(&assumeYes, "yes", "y")
+	parser.Bool(&showHelp, "help", "h")
+
+	_, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		fmt.Println("Usage: reta uninstall [--keep] [-y]")
+		fmt.Println("")
+		fmt.Println("  --keep       Remove only the PATH binary/symlink; keep ~/.reta")
+		fmt.Println("  -y, --yes    Skip confirmation prompts")
+		return nil
 	}
 
 	c := ui.Colors()
@@ -337,7 +346,7 @@ func RunUninstall(args []string) int {
 
 	if keepSource {
 		fmt.Printf("  %sOK%s    kept %s (--keep)\n", c.Green, c.Reset, retaRoot)
-		return 0
+		return nil
 	}
 
 	_ = os.RemoveAll(filepath.Join(home, ".cache", "reta"))
@@ -345,7 +354,7 @@ func RunUninstall(args []string) int {
 	fi, err := os.Lstat(retaRoot)
 	if err != nil {
 		ui.PrintDim(os.Stdout, fmt.Sprintf("%s not found", retaRoot))
-		return 0
+		return nil
 	}
 
 	if fi.Mode()&os.ModeSymlink != 0 {
@@ -353,28 +362,26 @@ func RunUninstall(args []string) int {
 		fmt.Printf("  %sOK%s    %s is a symlink -> %s\n", c.Green, c.Reset, retaRoot, target)
 		_ = os.Remove(retaRoot)
 		fmt.Printf("  %sOK%s    removed symlink (source directory kept intact)\n", c.Green, c.Reset)
-		return 0
+		return nil
 	}
 
 	_, hasBin := os.Stat(filepath.Join(retaRoot, "bin", "reta"))
 	_, hasBaseMK := os.Stat(filepath.Join(retaRoot, "lib", "base.mk"))
 	if hasBin != nil && hasBaseMK != nil {
-		fmt.Fprintf(os.Stderr, "  %sERR%s   %s does not look like a reta installation.\n", c.Red, c.Reset, retaRoot)
-		return 1
+		return cli.Exit(1, "%s does not look like a reta installation.", retaRoot)
 	}
 
 	if !assumeYes {
 		fmt.Printf("\nAbout to delete: %s\n", retaRoot)
 		if !ui.ConfirmYes(os.Stdout, "Continue? [y/N] ") {
 			ui.PrintDim(os.Stdout, "Cancelled.")
-			return 0
+			return nil
 		}
 	}
 
 	if err := os.RemoveAll(retaRoot); err != nil {
-		fmt.Fprintf(os.Stderr, "  %sERR%s   %v\n", c.Red, c.Reset, err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 	fmt.Printf("  %sOK%s    removed %s\n", c.Green, c.Reset, retaRoot)
-	return 0
+	return nil
 }

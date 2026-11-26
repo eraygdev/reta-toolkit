@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -22,64 +23,45 @@ func printInitEnvHelp() {
 	fmt.Println("  -h, --help         Show this help message")
 }
 
-func RunInitEnv(args []string) int {
+func RunInitEnv(args []string) error {
+	parser := cli.NewParser()
 	inputPath := ".env.example"
 	outputPath := ".env"
-	force := false
-	dryRun := false
+	var force bool
+	var dryRun bool
+	var showHelp bool
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch arg {
-		case "-h", "--help":
-			printInitEnvHelp()
-			return 0
-		case "-f", "--force":
-			force = true
-		case "-n", "--dry-run":
-			dryRun = true
-		case "-i", "--input":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "Error: %s requires a file argument.\n", arg)
-				return 2
-			}
-			i++
-			inputPath = args[i]
-		case "-o", "--output":
-			if i+1 >= len(args) {
-				fmt.Fprintf(os.Stderr, "Error: %s requires a file argument.\n", arg)
-				return 2
-			}
-			i++
-			outputPath = args[i]
-		default:
-			if strings.HasPrefix(arg, "--input=") {
-				inputPath = strings.TrimPrefix(arg, "--input=")
-			} else if strings.HasPrefix(arg, "--output=") {
-				outputPath = strings.TrimPrefix(arg, "--output=")
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-				return 2
-			}
-		}
+	parser.Bool(&showHelp, "help", "h")
+	parser.Bool(&force, "force", "f")
+	parser.Bool(&dryRun, "dry-run", "n")
+	parser.String(&inputPath, "input", "i")
+	parser.String(&outputPath, "output", "o")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printInitEnvHelp()
+		return nil
+	}
+	if len(pos) > 0 {
+		return cli.Exit(2, "unexpected argument: %s", pos[0])
 	}
 
 	c := ui.Colors()
 	if _, err := os.Stat(inputPath); err != nil {
 		cwd, _ := os.Getwd()
-		fmt.Fprintf(os.Stderr, "%sError:%s %s not found in %s\n", c.Red, c.Reset, inputPath, cwd)
-		return 1
+		return cli.Exit(1, "%s not found in %s", inputPath, cwd)
 	}
 
 	if _, err := os.Stat(outputPath); err == nil && !force {
-		fmt.Fprintf(os.Stderr, "%sError:%s %s already exists. Use %s--force%s to overwrite.\n", c.Red, c.Reset, outputPath, c.Bold, c.Reset)
-		return 1
+		return cli.Exit(1, "%s already exists. Use %s--force%s to overwrite.", outputPath, c.Bold, c.Reset)
 	}
 
 	rawData, err := os.ReadFile(inputPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 
 	fmt.Printf("%sreta init-env%s\n", c.Bold, c.Reset)
@@ -122,8 +104,7 @@ func RunInitEnv(args []string) int {
 			case "GENERATE_SECRET":
 				newVal, err := generateSecret()
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-					return 1
+					return cli.Wrap(1, err, "")
 				}
 				outputLines = append(outputLines, fmt.Sprintf("%s%s=%s", exportPrefix, key, newVal))
 				secretCount++
@@ -142,8 +123,7 @@ func RunInitEnv(args []string) int {
 					} else {
 						h, err := hashPassword(pw)
 						if err != nil {
-							fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-							return 1
+							return cli.Wrap(1, err, "")
 						}
 						outputLines = append(outputLines, fmt.Sprintf("%s%s=%s", exportPrefix, key, h))
 						hashCount++
@@ -175,18 +155,16 @@ func RunInitEnv(args []string) int {
 		fmt.Printf("\n%s--- dry run, would write: ---%s\n", c.Dim, c.Reset)
 		fmt.Print(result)
 		fmt.Printf("%s--- end ---%s\n", c.Dim, c.Reset)
-		return 0
+		return nil
 	}
 
 	if dir := filepath.Dir(outputPath); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-			return 1
+			return cli.Wrap(1, err, "")
 		}
 	}
 	if err := os.WriteFile(outputPath, []byte(result), 0o600); err != nil {
-		fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 	_ = os.Chmod(outputPath, 0o600)
 
@@ -223,5 +201,5 @@ func RunInitEnv(args []string) int {
 		steps = append(steps, "make help          List available make targets")
 	}
 	ui.NextSteps(steps)
-	return 0
+	return nil
 }

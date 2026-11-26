@@ -24,8 +24,8 @@ func TestCommandsRegistryAndHelp(t *testing.T) {
 		if findCommand(cmd.Name) == nil {
 			t.Fatalf("findCommand(%q) returned nil", cmd.Name)
 		}
-		if code := cmd.Run([]string{"--help"}); code != 0 {
-			t.Fatalf("command %q --help returned %d, want 0", cmd.Name, code)
+		if err := cmd.Run([]string{"--help"}); err != nil {
+			t.Fatalf("command %q --help returned error: %v, want nil", cmd.Name, err)
 		}
 	}
 

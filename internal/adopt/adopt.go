@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	reta "github.com/eraygdev/reta-toolkit"
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -839,48 +840,40 @@ func printHelp() {
 	fmt.Println("  -h, --help          Show this help message")
 }
 
-func Run(args []string) int {
-	target := "Makefile"
-	targetSet := false
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var showHelp bool
 	var opts Options
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
-		case "-n", "--dry-run":
-			opts.DryRun = true
-		case "--no-backup":
-			opts.NoBackup = true
-		case "--no-hints":
-			opts.NoHints = true
-		case "--summary-only":
-			opts.SummaryOnly = true
-		default:
-			if strings.HasPrefix(arg, "-") {
-				fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-				return 2
-			}
-			if !targetSet {
-				target = arg
-				targetSet = true
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: unexpected argument: %s\n", arg)
-				return 2
-			}
-		}
+
+	parser.Bool(&showHelp, "help", "h")
+	parser.Bool(&opts.DryRun, "dry-run", "n")
+	parser.Bool(&opts.NoBackup, "no-backup", "")
+	parser.Bool(&opts.NoHints, "no-hints", "")
+	parser.Bool(&opts.SummaryOnly, "summary-only", "")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printHelp()
+		return nil
 	}
 
-	c := ui.Colors()
+	target := "Makefile"
+	if len(pos) == 1 {
+		target = pos[0]
+	} else if len(pos) > 1 {
+		return cli.Exit(2, "unexpected argument: %s", pos[1])
+	}
+
 	info, err := os.Stat(target)
 	if err != nil || !info.Mode().IsRegular() {
-		fmt.Fprintf(os.Stderr, "%sError:%s %s not found.\n", c.Red, c.Reset, target)
-		return 1
+		return cli.Exit(1, "%s not found.", target)
 	}
 
 	if _, _, err := AdoptFile(target, opts); err != nil {
-		fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
-	return 0
+	return nil
 }

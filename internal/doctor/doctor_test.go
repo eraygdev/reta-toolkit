@@ -1,6 +1,7 @@
 package doctor
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	reta "github.com/eraygdev/reta-toolkit"
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
@@ -60,23 +62,32 @@ func TestEnsureBaseMK(t *testing.T) {
 	}
 }
 
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
+}
+
 func TestDoctorRunFlagsAndFix(t *testing.T) {
 	testutil.SilenceStdio(t)
 	t.Setenv("NO_COLOR", "1")
-	if code := Run([]string{"--help"}); code != 0 {
-		t.Fatalf("Run(--help) = %d, want 0", code)
-	}
-	if code := Run([]string{"--unknown"}); code != 2 {
-		t.Fatalf("Run(--unknown) = %d, want 2", code)
-	}
+
+	assertExitCode(t, Run([]string{"--help"}), 0)
+	assertExitCode(t, Run([]string{"--unknown"}), 2)
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	if code := Run(nil); code != 1 {
-		t.Fatalf("expected Run() on empty HOME to fail with 1, got %d", code)
-	}
+	assertExitCode(t, Run(nil), 1)
 
 	_ = Run([]string{"--fix"})
 	if _, err := os.Stat(filepath.Join(home, ".reta", "lib", "base.mk")); err != nil {

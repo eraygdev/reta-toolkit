@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -9,6 +10,7 @@ import (
 	reta "github.com/eraygdev/reta-toolkit"
 	"github.com/eraygdev/reta-toolkit/internal/adopt"
 	"github.com/eraygdev/reta-toolkit/internal/clean"
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/config"
 	"github.com/eraygdev/reta-toolkit/internal/doctor"
 	"github.com/eraygdev/reta-toolkit/internal/envfile"
@@ -28,7 +30,7 @@ type command struct {
 	Desc  string
 	Group string
 	Order int
-	Run   func(args []string) int
+	Run   func(args []string) error
 }
 
 var commands = []command{
@@ -201,6 +203,23 @@ func printMainHelp(version string) {
 	fmt.Println("")
 }
 
+func handleExit(err error) {
+	if err == nil {
+		os.Exit(0)
+	}
+	var exitErr *cli.ExitError
+	if errors.As(err, &exitErr) {
+		if exitErr.Message != "" {
+			c := ui.Colors()
+			fmt.Fprintf(os.Stderr, "%sError:%s %s\n", c.Red, c.Reset, exitErr.Message)
+		}
+		os.Exit(exitErr.Code)
+	}
+	c := ui.Colors()
+	fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
+	os.Exit(1)
+}
+
 func main() {
 	version := strings.TrimSpace(reta.VersionRaw)
 	if version == "" {
@@ -218,7 +237,7 @@ func main() {
 
 	if cmdName == "help" && len(rest) > 0 && rest[0] != "" {
 		if cmd := findCommand(rest[0]); cmd != nil {
-			os.Exit(cmd.Run([]string{"--help"}))
+			handleExit(cmd.Run([]string{"--help"}))
 		}
 		fmt.Printf("reta: unknown command '%s'\n", rest[0])
 		fmt.Println("Try: reta help")
@@ -235,11 +254,11 @@ func main() {
 	}
 
 	if cmdName == "export-context" {
-		os.Exit(exporter.Run(rest))
+		handleExit(exporter.Run(rest))
 	}
 
 	if cmd := findCommand(cmdName); cmd != nil {
-		os.Exit(cmd.Run(rest))
+		handleExit(cmd.Run(rest))
 	}
 
 	fmt.Printf("reta: unknown command '%s'\n", cmdName)

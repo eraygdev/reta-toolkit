@@ -100,8 +100,8 @@ func TestRunExportFilteringAndExportignore(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(root, ".env"), []byte("SECRET=123\n"), 0o644)
 
 	outPath := filepath.Join(root, "exports", "project_export.md")
-	if code := Run([]string{"-r", root, "--include", `src\*.py`}); code != 0 {
-		t.Fatalf("Run(export) = %d, want 0", code)
+	if err := Run([]string{"-r", root, "--include", `src\*.py`}); err != nil {
+		t.Fatalf("Run(export) failed: %v", err)
 	}
 
 	contentBytes, err := os.ReadFile(outPath)

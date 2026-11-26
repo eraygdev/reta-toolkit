@@ -11,6 +11,7 @@ import (
 
 	reta "github.com/eraygdev/reta-toolkit"
 	"github.com/eraygdev/reta-toolkit/internal/adopt"
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/retasign"
 	"github.com/eraygdev/reta-toolkit/internal/search"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
@@ -33,37 +34,32 @@ func fileExists(p string) bool {
 	return err == nil
 }
 
-func Run(args []string) int {
-	targetArg := "."
-	targetSet := false
-	convertMakefile := false
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var convertMakefile bool
+	var showHelp bool
+	parser.Bool(&convertMakefile, "convert", "")
+	parser.Bool(&showHelp, "help", "h")
 
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
-		case "--convert":
-			convertMakefile = true
-		default:
-			if strings.HasPrefix(arg, "-") {
-				fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-				return 1
-			}
-			if !targetSet {
-				targetArg = arg
-				targetSet = true
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: unexpected argument: %s\n", arg)
-				return 1
-			}
-		}
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printHelp()
+		return nil
+	}
+
+	targetArg := "."
+	if len(pos) == 1 {
+		targetArg = pos[0]
+	} else if len(pos) > 1 {
+		return cli.Exit(1, "unexpected argument: %s", pos[1])
 	}
 
 	info, err := os.Stat(targetArg)
 	if err != nil || !info.IsDir() {
-		fmt.Printf("Error: target directory does not exist: %s\n", targetArg)
-		return 1
+		return cli.Exit(1, "target directory does not exist: %s", targetArg)
 	}
 	targetDir, err := filepath.Abs(targetArg)
 	if err != nil {
@@ -79,8 +75,7 @@ func Run(args []string) int {
 
 	entries, err := fs.ReadDir(reta.TemplatesFS, "templates")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading embedded templates: %v\n", err)
-		return 1
+		return cli.Wrap(1, err, "reading embedded templates")
 	}
 
 	copied, skipped, converted := 0, 0, 0
@@ -112,8 +107,7 @@ func Run(args []string) int {
 				if doConvert {
 					did, _, err := adopt.AdoptFile(dst, adopt.Options{SummaryOnly: true, NoHints: true})
 					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error converting Makefile: %v\n", err)
-						return 1
+						return cli.Wrap(1, err, "converting Makefile")
 					}
 					if did {
 						fmt.Printf("  conv  %s (backup: %s.bak)\n", name, name)
@@ -133,19 +127,16 @@ func Run(args []string) int {
 			if name == "Makefile" {
 				content := adopt.LoadTemplateHeader(false, false)
 				if err := os.WriteFile(dst, []byte(content), 0o644); err != nil {
-					fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", dst, err)
-					return 1
+					return cli.Wrap(1, err, "writing %s", dst)
 				}
 				fmt.Printf("  ok    %s (dynamic)\n", name)
 			} else {
 				tplBytes, err := fs.ReadFile(reta.TemplatesFS, "templates/"+name)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error reading template %s: %v\n", name, err)
-					return 1
+					return cli.Wrap(1, err, "reading template %s", name)
 				}
 				if err := os.WriteFile(dst, tplBytes, 0o644); err != nil {
-					fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", dst, err)
-					return 1
+					return cli.Wrap(1, err, "writing %s", dst)
 				}
 				fmt.Printf("  ok    %s\n", name)
 			}
@@ -159,8 +150,7 @@ func Run(args []string) int {
 		skipped++
 	} else {
 		if _, err := retasign.WriteSignature(targetDir); err != nil {
-			fmt.Fprintf(os.Stderr, "Error writing %s: %v\n", signPath, err)
-			return 1
+			return cli.Wrap(1, err, "writing %s", signPath)
 		}
 		fmt.Printf("  ok    %s\n", retasign.SignFilename)
 		copied++
@@ -207,5 +197,5 @@ func Run(args []string) int {
 		ui.PrintDim(os.Stdout, "Tip: execute 'source ~/.bashrc' if 'rcd' is not loaded yet")
 	}
 	ui.NextSteps(next)
-	return 0
+	return nil
 }

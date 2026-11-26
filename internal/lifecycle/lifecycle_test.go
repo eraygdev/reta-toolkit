@@ -1,12 +1,14 @@
 package lifecycle
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
@@ -49,20 +51,26 @@ func TestReplaceBinary(t *testing.T) {
 	}
 }
 
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
+}
+
 func TestRunUpdateAndUninstallFlags(t *testing.T) {
 	testutil.SilenceStdio(t)
-	if code := RunUpdate([]string{"--help"}); code != 0 {
-		t.Fatalf("RunUpdate(--help) = %d, want 0", code)
-	}
-	if code := RunUpdate([]string{"--bad-flag"}); code != 1 {
-		t.Fatalf("RunUpdate(--bad-flag) = %d, want 1", code)
-	}
-	if code := RunUninstall([]string{"--help"}); code != 0 {
-		t.Fatalf("RunUninstall(--help) = %d, want 0", code)
-	}
-	if code := RunUninstall([]string{"--bad-flag"}); code != 1 {
-		t.Fatalf("RunUninstall(--bad-flag) = %d, want 1", code)
-	}
+	assertExitCode(t, RunUpdate([]string{"--help"}), 0)
+	assertExitCode(t, RunUpdate([]string{"--bad-flag"}), 2)
+	assertExitCode(t, RunUninstall([]string{"--help"}), 0)
+	assertExitCode(t, RunUninstall([]string{"--bad-flag"}), 2)
 }
 
 func setupFakeUninstallEnv(t *testing.T) (home, retaRoot, binPath string) {
@@ -99,9 +107,7 @@ func TestRunUninstallKeepAndFull(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := RunUninstall([]string{"--keep"}); code != 0 {
-		t.Fatalf("RunUninstall(--keep) = %d, want 0", code)
-	}
+	assertExitCode(t, RunUninstall([]string{"--keep"}), 0)
 	if _, err := os.Stat(binPath); !os.IsNotExist(err) {
 		t.Fatal("expected binary to be removed with --keep")
 	}
@@ -113,9 +119,7 @@ func TestRunUninstallKeepAndFull(t *testing.T) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if code := RunUninstall([]string{"-y"}); code != 0 {
-		t.Fatalf("RunUninstall(-y) = %d, want 0", code)
-	}
+	assertExitCode(t, RunUninstall([]string{"-y"}), 0)
 	if _, err := os.Stat(retaRoot); !os.IsNotExist(err) {
 		t.Fatal("expected ~/.reta removed with -y")
 	}
@@ -130,9 +134,7 @@ func TestRunUninstallSafetyAndSymlink(t *testing.T) {
 	if err := os.MkdirAll(retaRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if code := RunUninstall([]string{"-y"}); code != 1 {
-		t.Fatalf("expected refusal when ~/.reta lacks reta markers, got %d", code)
-	}
+	assertExitCode(t, RunUninstall([]string{"-y"}), 1)
 	if _, err := os.Stat(retaRoot); err != nil {
 		t.Fatal("expected invalid ~/.reta not to be deleted")
 	}
@@ -147,9 +149,7 @@ func TestRunUninstallSafetyAndSymlink(t *testing.T) {
 		t.Skipf("symlink creation not permitted: %v", err)
 	}
 
-	if code := RunUninstall([]string{"-y"}); code != 0 {
-		t.Fatalf("RunUninstall(-y) on symlink = %d, want 0", code)
-	}
+	assertExitCode(t, RunUninstall([]string{"-y"}), 0)
 	if _, err := os.Lstat(retaRoot); !os.IsNotExist(err) {
 		t.Fatal("expected symlink ~/.reta to be removed")
 	}

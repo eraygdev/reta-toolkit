@@ -67,21 +67,21 @@ func TestRunInitEnvAndEnvSubcommands(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := RunInitEnv([]string{"--dry-run"}); code != 0 {
-		t.Fatalf("RunInitEnv(--dry-run) = %d", code)
+	if err := RunInitEnv([]string{"--dry-run"}); err != nil {
+		t.Fatalf("RunInitEnv(--dry-run) failed: %v", err)
 	}
 	if _, err := os.Stat(".env"); !os.IsNotExist(err) {
 		t.Fatal("--dry-run must not write .env")
 	}
 
-	if code := RunInitEnv(nil); code != 0 {
-		t.Fatalf("RunInitEnv() = %d", code)
+	if err := RunInitEnv(nil); err != nil {
+		t.Fatalf("RunInitEnv() failed: %v", err)
 	}
-	if code := RunInitEnv(nil); code != 1 {
-		t.Fatalf("expected RunInitEnv without --force to exit 1 when .env exists, got %d", code)
+	if err := RunInitEnv(nil); err == nil {
+		t.Fatal("expected RunInitEnv without --force to fail when .env exists")
 	}
-	if code := RunInitEnv([]string{"--force"}); code != 0 {
-		t.Fatalf("RunInitEnv(--force) = %d", code)
+	if err := RunInitEnv([]string{"--force"}); err != nil {
+		t.Fatalf("RunInitEnv(--force) failed: %v", err)
 	}
 
 	data, err := os.ReadFile(".env")
@@ -97,14 +97,14 @@ func TestRunInitEnvAndEnvSubcommands(t *testing.T) {
 	}
 
 	// EMPTY_KEY is empty -> check exits 1
-	if code := RunEnv([]string{"check"}); code != 1 {
-		t.Fatalf("RunEnv(check) with empty key = %d, want 1", code)
+	if err := RunEnv([]string{"check"}); err == nil {
+		t.Fatal("RunEnv(check) with empty key should fail")
 	}
-	if code := RunEnv([]string{"diff"}); code != 0 {
-		t.Fatalf("RunEnv(diff) with identical keys = %d, want 0", code)
+	if err := RunEnv([]string{"diff"}); err != nil {
+		t.Fatalf("RunEnv(diff) with identical keys failed: %v", err)
 	}
-	if code := RunEnv([]string{"list", "--show"}); code != 0 {
-		t.Fatalf("RunEnv(list --show) = %d, want 0", code)
+	if err := RunEnv([]string{"list", "--show"}); err != nil {
+		t.Fatalf("RunEnv(list --show) failed: %v", err)
 	}
 
 	// Add a new key to .env.example and sync
@@ -112,11 +112,11 @@ func TestRunInitEnvAndEnvSubcommands(t *testing.T) {
 	if err := os.WriteFile(".env.example", []byte(example), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := RunEnv([]string{"diff"}); code != 1 {
-		t.Fatalf("RunEnv(diff) with missing keys = %d, want 1", code)
+	if err := RunEnv([]string{"diff"}); err == nil {
+		t.Fatal("RunEnv(diff) with missing keys should fail")
 	}
-	if code := RunEnv([]string{"sync"}); code != 0 {
-		t.Fatalf("RunEnv(sync) = %d, want 0", code)
+	if err := RunEnv([]string{"sync"}); err != nil {
+		t.Fatalf("RunEnv(sync) failed: %v", err)
 	}
 
 	syncedBytes, _ := os.ReadFile(".env")
@@ -144,8 +144,8 @@ func TestInlineCommentsQuotedValuesAndUrls(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if code := RunInitEnv(nil); code != 0 {
-		t.Fatalf("RunInitEnv() = %d", code)
+	if err := RunInitEnv(nil); err != nil {
+		t.Fatalf("RunInitEnv() failed: %v", err)
 	}
 	initBytes, _ := os.ReadFile(".env")
 	if !strings.Contains(string(initBytes), `QUOTED_SECRET="GENERATE_SECRET"`) {
@@ -153,16 +153,16 @@ func TestInlineCommentsQuotedValuesAndUrls(t *testing.T) {
 	}
 
 	// EMPTY_COMMENTED is empty -> check must fail with 1
-	if code := RunEnv([]string{"check"}); code != 1 {
-		t.Fatalf("RunEnv(check) with EMPTY_COMMENTED = %d, want 1", code)
+	if err := RunEnv([]string{"check"}); err == nil {
+		t.Fatal("RunEnv(check) with EMPTY_COMMENTED should fail")
 	}
 
 	// Verify sync strips trailing comments on unquoted defaults and preserves URL fragments
 	if err := os.WriteFile(".env", []byte("EMPTY_COMMENTED=ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := RunEnv([]string{"sync"}); code != 0 {
-		t.Fatalf("RunEnv(sync) = %d, want 0", code)
+	if err := RunEnv([]string{"sync"}); err != nil {
+		t.Fatalf("RunEnv(sync) failed: %v", err)
 	}
 	syncedBytes, _ := os.ReadFile(".env")
 	synced := string(syncedBytes)

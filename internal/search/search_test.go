@@ -1,15 +1,31 @@
 package search
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/retasign"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
+
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
+}
 
 func TestIsSkippedPathCrossPlatform(t *testing.T) {
 	home := t.TempDir()
@@ -74,13 +90,9 @@ func TestResolveQueryAndDepthDiscovery(t *testing.T) {
 		t.Fatalf("unexpected numeric query result: %q %v", status, matched)
 	}
 
-	if code := Run([]string{"deep"}); code != 1 {
-		t.Fatalf("expected depth=4 search for deep to fail with 1, got %d", code)
-	}
+	assertExitCode(t, Run([]string{"deep"}), 1)
+	assertExitCode(t, Run([]string{"api"}), 0)
 
-	if code := Run([]string{"api"}); code != 0 {
-		t.Fatalf("expected search api to succeed, got %d", code)
-	}
 	jfData, err := os.ReadFile(jumpFile())
 	if err != nil {
 		t.Fatalf("expected jump file written: %v", err)

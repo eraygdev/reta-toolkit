@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -250,62 +251,40 @@ func cmdSync(example, env parsedEnv, envPath string, dryRun bool) int {
 	return 0
 }
 
-func RunEnv(args []string) int {
+func RunEnv(args []string) error {
+	parser := cli.NewParser()
 	envPath := ".env"
 	examplePath := ".env.example"
-	cmd := ""
-	show := false
-	dryRun := false
+	var show bool
+	var dryRun bool
+	var showHelp bool
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-		switch arg {
-		case "-h", "--help":
-			printEnvHelp()
-			return 0
-		case "--env":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "Error: --env requires a file argument.")
-				return 2
-			}
-			i++
-			envPath = args[i]
-		case "--example":
-			if i+1 >= len(args) {
-				fmt.Fprintln(os.Stderr, "Error: --example requires a file argument.")
-				return 2
-			}
-			i++
-			examplePath = args[i]
-		case "--show":
-			show = true
-		case "-n", "--dry-run":
-			dryRun = true
-		default:
-			if strings.HasPrefix(arg, "--env=") {
-				envPath = strings.TrimPrefix(arg, "--env=")
-			} else if strings.HasPrefix(arg, "--example=") {
-				examplePath = strings.TrimPrefix(arg, "--example=")
-			} else if strings.HasPrefix(arg, "-") {
-				fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-				return 2
-			} else if cmd == "" {
-				cmd = arg
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: unexpected argument: %s\n", arg)
-				return 2
-			}
-		}
+	parser.Bool(&showHelp, "help", "h")
+	parser.Bool(&show, "show", "")
+	parser.Bool(&dryRun, "dry-run", "n")
+	parser.String(&envPath, "env", "")
+	parser.String(&examplePath, "example", "")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printEnvHelp()
+		return nil
+	}
+	if len(pos) == 0 {
+		printEnvHelp()
+		return nil
 	}
 
-	if cmd == "" {
-		printEnvHelp()
-		return 0
+	cmd := pos[0]
+	if len(pos) > 1 {
+		return cli.Exit(2, "unexpected argument: %s", pos[1])
 	}
 
 	if cmd != "check" && cmd != "list" && cmd != "diff" && cmd != "sync" {
-		fmt.Fprintf(os.Stderr, "Error: unknown subcommand '%s'.\n", cmd)
-		return 2
+		return cli.Exit(2, "unknown subcommand '%s'.", cmd)
 	}
 
 	if _, err := os.Stat(examplePath); err != nil {
@@ -313,25 +292,23 @@ func RunEnv(args []string) int {
 			"reta init        Scaffold .env.example in this directory",
 			"reta init-env    Then generate .env from it",
 		})
-		return 1
+		return cli.Exit(1, "")
 	}
 
 	if _, err := os.Stat(envPath); err != nil {
 		dieMissing(envPath, []string{
 			"reta init-env    Generate .env from .env.example",
 		})
-		return 1
+		return cli.Exit(1, "")
 	}
 
 	example, err := parseEnvFile(examplePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 	env, err := parseEnvFile(envPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 
 	c := ui.Colors()
@@ -362,7 +339,10 @@ func RunEnv(args []string) int {
 				"reta env check     Re-check after editing",
 			})
 		}
-		return code
+		if code != 0 {
+			return cli.Exit(code, "")
+		}
+		return nil
 	case "list":
 		code := cmdList(env, show)
 		if code == 0 {
@@ -371,7 +351,10 @@ func RunEnv(args []string) int {
 				"reta env diff      Compare against .env.example",
 			})
 		}
-		return code
+		if code != 0 {
+			return cli.Exit(code, "")
+		}
+		return nil
 	case "diff":
 		code := cmdDiff(example, env)
 		if code == 0 {
@@ -385,7 +368,10 @@ func RunEnv(args []string) int {
 				"reta env check     Re-verify after syncing",
 			})
 		}
-		return code
+		if code != 0 {
+			return cli.Exit(code, "")
+		}
+		return nil
 	case "sync":
 		code := cmdSync(example, env, envPath, dryRun)
 		if code == 0 && !dryRun {
@@ -394,7 +380,10 @@ func RunEnv(args []string) int {
 				"reta env list      Preview keys with masked values",
 			})
 		}
-		return code
+		if code != 0 {
+			return cli.Exit(code, "")
+		}
+		return nil
 	}
-	return 1
+	return cli.Exit(1, "")
 }

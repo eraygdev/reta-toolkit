@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 )
 
 var allCommands = []string{
@@ -25,22 +27,34 @@ func detectShell() string {
 	return "bash"
 }
 
-func RunShellInit(args []string) int {
-	target := ""
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			fmt.Println("Usage: reta shell-init [bash|zsh|powershell]")
-			fmt.Println("")
-			fmt.Println("Print shell integration code for 'rcd' project jumping.")
-			return 0
-		case "bash", "zsh", "powershell":
-			target = arg
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unsupported shell '%s' (choose bash, zsh, powershell).\n", arg)
-			return 2
-		}
+func RunShellInit(args []string) error {
+	parser := cli.NewParser()
+	var showHelp bool
+	parser.Bool(&showHelp, "help", "h")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
 	}
+	if showHelp {
+		fmt.Println("Usage: reta shell-init [bash|zsh|powershell]")
+		fmt.Println("")
+		fmt.Println("Print shell integration code for 'rcd' project jumping.")
+		return nil
+	}
+
+	target := ""
+	if len(pos) == 1 {
+		switch pos[0] {
+		case "bash", "zsh", "powershell":
+			target = pos[0]
+		default:
+			return cli.Exit(2, "unsupported shell '%s' (choose bash, zsh, powershell).", pos[0])
+		}
+	} else if len(pos) > 1 {
+		return cli.Exit(2, "unexpected argument: %s", pos[1])
+	}
+
 	if target == "" {
 		target = detectShell()
 	}
@@ -83,25 +97,37 @@ func RunShellInit(args []string) int {
 }
 `)
 	}
-	return 0
+	return nil
 }
 
-func RunCompletion(args []string) int {
-	target := ""
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			fmt.Println("Usage: reta completion [bash|zsh|powershell]")
-			fmt.Println("")
-			fmt.Println("Generate shell completion script.")
-			return 0
-		case "bash", "zsh", "powershell":
-			target = arg
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unsupported shell '%s' (choose bash, zsh, powershell).\n", arg)
-			return 2
-		}
+func RunCompletion(args []string) error {
+	parser := cli.NewParser()
+	var showHelp bool
+	parser.Bool(&showHelp, "help", "h")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
 	}
+	if showHelp {
+		fmt.Println("Usage: reta completion [bash|zsh|powershell]")
+		fmt.Println("")
+		fmt.Println("Generate shell completion script.")
+		return nil
+	}
+
+	target := ""
+	if len(pos) == 1 {
+		switch pos[0] {
+		case "bash", "zsh", "powershell":
+			target = pos[0]
+		default:
+			return cli.Exit(2, "unsupported shell '%s' (choose bash, zsh, powershell).", pos[0])
+		}
+	} else if len(pos) > 1 {
+		return cli.Exit(2, "unexpected argument: %s", pos[1])
+	}
+
 	if target == "" {
 		target = detectShell()
 	}
@@ -209,5 +235,5 @@ _reta "$@"
 }
 `, strings.Join(quoted, ", "))
 	}
-	return 0
+	return nil
 }

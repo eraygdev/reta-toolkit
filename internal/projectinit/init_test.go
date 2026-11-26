@@ -1,13 +1,29 @@
 package projectinit
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
+
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
+}
 
 func TestInitScaffoldsAndConverts(t *testing.T) {
 	testutil.SilenceStdio(t)
@@ -21,9 +37,8 @@ func TestInitScaffoldsAndConverts(t *testing.T) {
 	if err := os.MkdirAll(proj, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if code := Run([]string{proj}); code != 0 {
-		t.Fatalf("Run(fresh) = %d", code)
-	}
+	assertExitCode(t, Run([]string{proj}), 0)
+
 	for _, f := range []string{"Makefile", ".env.example", ".gitignore", "README.md", ".retasign"} {
 		if _, err := os.Stat(filepath.Join(proj, f)); err != nil {
 			t.Fatalf("missing scaffolded file %s: %v", f, err)
@@ -39,18 +54,15 @@ func TestInitScaffoldsAndConverts(t *testing.T) {
 	if err := os.WriteFile(mkPath, []byte("custom:\n\techo hi\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if code := Run([]string{existing}); code != 0 {
-		t.Fatalf("Run(existing) = %d", code)
-	}
+	assertExitCode(t, Run([]string{existing}), 0)
+
 	got, _ := os.ReadFile(mkPath)
 	if string(got) != "custom:\n\techo hi\n" {
 		t.Fatalf("expected Makefile untouched without --convert, got:\n%s", string(got))
 	}
 
 	// --convert adopts Makefile and keeps a backup
-	if code := Run([]string{existing, "--convert"}); code != 0 {
-		t.Fatalf("Run(existing --convert) = %d", code)
-	}
+	assertExitCode(t, Run([]string{existing, "--convert"}), 0)
 	if _, err := os.Stat(filepath.Join(existing, "Makefile.bak")); err != nil {
 		t.Fatalf("expected Makefile.bak: %v", err)
 	}

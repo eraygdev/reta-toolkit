@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -484,30 +485,42 @@ func cmdKillInteractive() int {
 	return 0
 }
 
-func Run(args []string) int {
+func Run(args []string) error {
 	if len(args) == 0 {
 		printHelp()
-		return 0
+		return nil
 	}
 	sub := args[0]
 	rest := args[1:]
 
 	switch sub {
 	case "list", "ls":
-		return cmdList(rest)
-	case "kill":
-		if len(rest) > 0 {
-			return cmdKillByPort(rest[0])
+		if code := cmdList(rest); code != 0 {
+			return cli.Exit(code, "")
 		}
-		return cmdKillInteractive()
+		return nil
+	case "kill":
+		code := 0
+		if len(rest) > 0 {
+			code = cmdKillByPort(rest[0])
+		} else {
+			code = cmdKillInteractive()
+		}
+		if code != 0 {
+			return cli.Exit(code, "")
+		}
+		return nil
 	case "docker", "ps":
-		return cmdDocker()
+		if code := cmdDocker(); code != 0 {
+			return cli.Exit(code, "")
+		}
+		return nil
 	case "help", "--help", "-h", "":
 		printHelp()
-		return 0
+		return nil
 	default:
 		fmt.Fprintf(os.Stderr, "  %sERR%s   Unknown subcommand: %s\n", ui.Colors().Red, ui.Colors().Reset, sub)
 		fmt.Println("Run: reta port help")
-		return 1
+		return cli.Exit(1, "")
 	}
 }

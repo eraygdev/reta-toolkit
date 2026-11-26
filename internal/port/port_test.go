@@ -57,10 +57,10 @@ func TestParseDockerPortMappingsIgnoresUDP(t *testing.T) {
 
 func TestRunHelpAndUnknownSubcommand(t *testing.T) {
 	testutil.SilenceStdio(t)
-	if code := Run([]string{"--help"}); code != 0 {
-		t.Fatalf("Run(--help) = %d, want 0", code)
+	if err := Run([]string{"--help"}); err != nil {
+		t.Fatalf("Run(--help) = %v, want nil", err)
 	}
-	if code := Run([]string{"invalid-subcmd"}); code != 1 {
-		t.Fatalf("Run(invalid-subcmd) = %d, want 1", code)
+	if err := Run([]string{"invalid-subcmd"}); err == nil {
+		t.Fatal("expected error for invalid-subcmd")
 	}
 }

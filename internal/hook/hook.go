@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -95,44 +96,46 @@ func resolveGitPaths(cwd string) (toplevel, gitDir string, ok bool) {
 	return toplevel, gitDir, true
 }
 
-func Run(args []string) int {
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var showHelp bool
+	parser.Bool(&showHelp, "help", "h")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printHelp()
+		return nil
+	}
+
 	action := "install"
-	actionSet := false
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
+	if len(pos) == 1 {
+		switch pos[0] {
 		case "install", "remove", "status":
-			if actionSet {
-				fmt.Fprintf(os.Stderr, "Error: unexpected argument: %s\n", arg)
-				return 2
-			}
-			action = arg
-			actionSet = true
+			action = pos[0]
 		default:
-			fmt.Fprintf(os.Stderr, "Error: invalid action '%s' (choose from install, remove, status).\n", arg)
-			return 2
+			return cli.Exit(2, "invalid action '%s' (choose from install, remove, status).", pos[0])
 		}
+	} else if len(pos) > 1 {
+		return cli.Exit(2, "unexpected argument: %s", pos[1])
 	}
 
 	c := ui.Colors()
 	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 
 	toplevel, gitDir, ok := resolveGitPaths(cwd)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "%sError:%s Not a git repository (no .git directory found).\n", c.Red, c.Reset)
-		return 1
+		return cli.Exit(1, "Not a git repository (no .git directory found).")
 	}
 
 	hooksDir := filepath.Join(gitDir, "hooks")
 	if err := os.MkdirAll(hooksDir, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 	hookFile := filepath.Join(hooksDir, "pre-commit")
 
@@ -143,13 +146,12 @@ func Run(args []string) int {
 				fmt.Printf("%sWarning:%s A different pre-commit hook already exists.\n", c.Yellow, c.Reset)
 				if !ui.ConfirmYes(os.Stdout, "Overwrite? [y/N] ") {
 					fmt.Println("Cancelled.")
-					return 0
+					return nil
 				}
 			}
 		}
 		if err := os.WriteFile(hookFile, []byte(hookScript), 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-			return 1
+			return cli.Wrap(1, err, "")
 		}
 		_ = os.Chmod(hookFile, 0o755)
 		displayPath := hookFile
@@ -158,19 +160,18 @@ func Run(args []string) int {
 		}
 		fmt.Printf("%sOK%s Installed pre-commit secret scanner hook into %s\n", c.Green, c.Reset, displayPath)
 		ui.NextSteps([]string{"git commit -m 'test'    Test the pre-commit hook protection"})
-		return 0
+		return nil
 
 	case "remove":
 		if data, err := os.ReadFile(hookFile); err == nil && strings.Contains(string(data), "check-secrets") {
 			if err := os.Remove(hookFile); err != nil {
-				fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-				return 1
+				return cli.Wrap(1, err, "")
 			}
 			fmt.Printf("%sOK%s Removed pre-commit hook.\n", c.Green, c.Reset)
 		} else {
 			fmt.Println("No reta pre-commit hook found.")
 		}
-		return 0
+		return nil
 
 	case "status":
 		if data, err := os.ReadFile(hookFile); err == nil && strings.Contains(string(data), "check-secrets") {
@@ -178,7 +179,7 @@ func Run(args []string) int {
 		} else {
 			fmt.Printf("%sInactive%s no pre-commit hook installed.\n", c.Dim, c.Reset)
 		}
-		return 0
+		return nil
 	}
-	return 0
+	return nil
 }

@@ -2,15 +2,17 @@ package shell
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"strings"
 	"testing"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
-func captureStdout(t *testing.T, fn func() int) (int, string) {
+func captureStdout(t *testing.T, fn func() error) (error, string) {
 	t.Helper()
 	orig := os.Stdout
 	r, w, err := os.Pipe()
@@ -18,42 +20,50 @@ func captureStdout(t *testing.T, fn func() int) (int, string) {
 		t.Fatal(err)
 	}
 	os.Stdout = w
-	code := fn()
+	cmdErr := fn()
 	_ = w.Close()
 	os.Stdout = orig
 	var buf bytes.Buffer
 	_, _ = io.Copy(&buf, r)
 	_ = r.Close()
-	return code, buf.String()
+	return cmdErr, buf.String()
+}
+
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
 }
 
 func TestRunShellInitOutputs(t *testing.T) {
 	testutil.SilenceStdio(t)
 	for _, sh := range []string{"bash", "zsh"} {
-		code, out := captureStdout(t, func() int {
+		err, out := captureStdout(t, func() error {
 			return RunShellInit([]string{sh})
 		})
-		if code != 0 {
-			t.Fatalf("RunShellInit(%s) = %d", sh, code)
-		}
+		assertExitCode(t, err, 0)
 		if !strings.Contains(out, "rcd()") || !strings.Contains(out, "reta search") {
 			t.Fatalf("unexpected %s shell-init output:\n%s", sh, out)
 		}
 	}
 
-	code, psOut := captureStdout(t, func() int {
+	err, psOut := captureStdout(t, func() error {
 		return RunShellInit([]string{"powershell"})
 	})
-	if code != 0 {
-		t.Fatalf("RunShellInit(powershell) = %d", code)
-	}
+	assertExitCode(t, err, 0)
 	if !strings.Contains(psOut, "function rcd") || !strings.Contains(psOut, "Set-Location") {
 		t.Fatalf("unexpected powershell shell-init output:\n%s", psOut)
 	}
 
-	if code := RunShellInit([]string{"fish"}); code != 2 {
-		t.Fatalf("expected exit 2 for unsupported shell, got %d", code)
-	}
+	assertExitCode(t, RunShellInit([]string{"fish"}), 2)
 }
 
 func TestRunCompletionOutputs(t *testing.T) {
@@ -67,12 +77,10 @@ func TestRunCompletionOutputs(t *testing.T) {
 		{"powershell", "Register-ArgumentCompleter"},
 	}
 	for _, tc := range tests {
-		code, out := captureStdout(t, func() int {
+		err, out := captureStdout(t, func() error {
 			return RunCompletion([]string{tc.shell})
 		})
-		if code != 0 {
-			t.Fatalf("RunCompletion(%s) = %d", tc.shell, code)
-		}
+		assertExitCode(t, err, 0)
 		if !strings.Contains(out, tc.want) {
 			t.Fatalf("completion for %s missing %q", tc.shell, tc.want)
 		}
@@ -83,7 +91,5 @@ func TestRunCompletionOutputs(t *testing.T) {
 		}
 	}
 
-	if code := RunCompletion([]string{"tcsh"}); code != 2 {
-		t.Fatalf("expected exit 2 for unsupported shell, got %d", code)
-	}
+	assertExitCode(t, RunCompletion([]string{"tcsh"}), 2)
 }

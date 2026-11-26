@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	reta "github.com/eraygdev/reta-toolkit"
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -47,19 +48,20 @@ func EnsureBaseMK(retaRoot string) error {
 	return os.WriteFile(baseMKPath, []byte(reta.BaseMK), 0o644)
 }
 
-func Run(args []string) int {
-	fix := false
-	for _, arg := range args {
-		switch arg {
-		case "--fix":
-			fix = true
-		case "-h", "--help":
-			printHelp()
-			return 0
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-			return 2
-		}
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var fix bool
+	var showHelp bool
+	parser.Bool(&fix, "fix", "")
+	parser.Bool(&showHelp, "help", "h")
+
+	_, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printHelp()
+		return nil
 	}
 
 	c := ui.Colors()
@@ -265,7 +267,7 @@ func Run(args []string) int {
 	fmt.Println("")
 	fmt.Printf("Summary: %d OK, %d WARN, %d FAIL\n", okCount, warnCount, failCount)
 	if failCount > 0 {
-		return 1
+		return cli.Exit(1, "")
 	}
-	return 0
+	return nil
 }

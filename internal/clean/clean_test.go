@@ -1,22 +1,35 @@
 package clean
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
+
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
+}
 
 func TestRunHelpAndUnknownOption(t *testing.T) {
 	testutil.SilenceStdio(t)
 	t.Setenv("NO_COLOR", "1")
-	if code := Run([]string{"--help"}); code != 0 {
-		t.Fatalf("Run(--help) = %d, want 0", code)
-	}
-	if code := Run([]string{"--unknown"}); code != 1 {
-		t.Fatalf("Run(--unknown) = %d, want 1", code)
-	}
+
+	assertExitCode(t, Run([]string{"--help"}), 0)
+	assertExitCode(t, Run([]string{"--unknown"}), 2)
 }
 
 func TestCleanPythonCachesRespectsSkipDirs(t *testing.T) {

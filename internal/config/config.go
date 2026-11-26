@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -107,42 +108,38 @@ func printHelp() {
 	fmt.Println("  -h, --help    Show this help message")
 }
 
-func Run(args []string) int {
-	reset := false
-	pos := make([]string, 0, len(args))
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
-		case "--reset":
-			reset = true
-		default:
-			if strings.HasPrefix(arg, "-") {
-				fmt.Fprintf(os.Stderr, "Error: unknown option '%s'.\n", arg)
-				return 2
-			}
-			pos = append(pos, arg)
-		}
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var reset bool
+	var showHelp bool
+	parser.Bool(&reset, "reset", "")
+	parser.Bool(&showHelp, "help", "h")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+
+	if showHelp {
+		printHelp()
+		return nil
 	}
 
 	p, err := FilePath()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 
 	if reset {
 		if _, err := os.Stat(p); err == nil {
 			if err := os.Remove(p); err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				return 1
+				return cli.Wrap(1, err, "")
 			}
 			fmt.Printf("OK  reset %s\n", p)
 		} else {
 			fmt.Println("OK  already at defaults")
 		}
-		return 0
+		return nil
 	}
 
 	cfg := Load()
@@ -171,7 +168,7 @@ func Run(args []string) int {
 		}
 		fmt.Println("")
 		fmt.Println("Change: reta config <key> <value>")
-		return 0
+		return nil
 	}
 
 	key := pos[0]
@@ -183,7 +180,7 @@ func Run(args []string) int {
 		sort.Strings(keys)
 		fmt.Fprintf(os.Stderr, "Error: unknown setting '%s'.\n", key)
 		fmt.Fprintf(os.Stderr, "Valid: %s\n", strings.Join(keys, ", "))
-		return 1
+		return cli.Exit(1, "")
 	}
 
 	if len(pos) == 1 {
@@ -192,29 +189,26 @@ func Run(args []string) int {
 		} else {
 			fmt.Printf("%s=%s\n", key, cfg[key])
 		}
-		return 0
+		return nil
 	}
 
 	val := pos[1]
 	switch key {
 	case "hints", "learn":
 		if val != "on" && val != "off" {
-			fmt.Fprintf(os.Stderr, "Error: invalid value '%s' for '%s' (on/off).\n", val, key)
-			return 2
+			return cli.Exit(2, "invalid value '%s' for '%s' (on/off).", val, key)
 		}
 	case "search-depth":
 		n, err := strconv.Atoi(val)
 		if err != nil || n < 1 {
-			fmt.Fprintf(os.Stderr, "Error: invalid value '%s' for 'search-depth' (integer >= 1).\n", val)
-			return 2
+			return cli.Exit(2, "invalid value '%s' for 'search-depth' (integer >= 1).", val)
 		}
 		val = strconv.Itoa(n)
 	}
 
 	cfg[key] = val
 	if err := Save(cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 
 	if key == "search-depth" {
@@ -233,5 +227,5 @@ func Run(args []string) int {
 	case key == "learn" && val == "off":
 		fmt.Println("Learning mode disabled.")
 	}
-	return 0
+	return nil
 }

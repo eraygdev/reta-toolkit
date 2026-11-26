@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -72,16 +73,22 @@ func removeDirContents(dir string) {
 	}
 }
 
-func Run(args []string) int {
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
-		default:
-			fmt.Fprintf(os.Stderr, "  %sERR%s   Unknown option: %s\n", ui.Colors().Red, ui.Colors().Reset, arg)
-			return 1
-		}
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var showHelp bool
+	parser.Bool(&showHelp, "help", "h")
+
+	_, err := parser.Parse(args)
+	if err != nil {
+		return err
 	}
-	return runPlatformClean()
+	if showHelp {
+		printHelp()
+		return nil
+	}
+
+	if code := runPlatformClean(); code != 0 {
+		return cli.Exit(code, "")
+	}
+	return nil
 }

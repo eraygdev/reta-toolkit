@@ -1,10 +1,12 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
@@ -16,6 +18,20 @@ func setTempHome(t *testing.T) string {
 	return home
 }
 
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
+}
+
 func TestConfigLoadSaveAndValidation(t *testing.T) {
 	testutil.SilenceStdio(t)
 	home := setTempHome(t)
@@ -25,15 +41,9 @@ func TestConfigLoadSaveAndValidation(t *testing.T) {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 
-	if code := Run([]string{"hints", "off"}); code != 0 {
-		t.Fatalf("Run(hints off) = %d, want 0", code)
-	}
-	if code := Run([]string{"learn", "on"}); code != 0 {
-		t.Fatalf("Run(learn on) = %d, want 0", code)
-	}
-	if code := Run([]string{"search-depth", "7"}); code != 0 {
-		t.Fatalf("Run(search-depth 7) = %d, want 0", code)
-	}
+	assertExitCode(t, Run([]string{"hints", "off"}), 0)
+	assertExitCode(t, Run([]string{"learn", "on"}), 0)
+	assertExitCode(t, Run([]string{"search-depth", "7"}), 0)
 
 	if got := SearchDepth(); got != 7 {
 		t.Fatalf("SearchDepth() = %d, want 7", got)
@@ -44,22 +54,12 @@ func TestConfigLoadSaveAndValidation(t *testing.T) {
 		t.Fatalf("expected config file at %s: %v", cfgPath, err)
 	}
 
-	if code := Run([]string{"unknown"}); code != 1 {
-		t.Fatalf("Run(unknown) = %d, want 1", code)
-	}
-	if code := Run([]string{"hints", "maybe"}); code != 2 {
-		t.Fatalf("Run(hints maybe) = %d, want 2", code)
-	}
-	if code := Run([]string{"search-depth", "0"}); code != 2 {
-		t.Fatalf("Run(search-depth 0) = %d, want 2", code)
-	}
-	if code := Run([]string{"--bad-flag"}); code != 2 {
-		t.Fatalf("Run(--bad-flag) = %d, want 2", code)
-	}
+	assertExitCode(t, Run([]string{"unknown"}), 1)
+	assertExitCode(t, Run([]string{"hints", "maybe"}), 2)
+	assertExitCode(t, Run([]string{"search-depth", "0"}), 2)
+	assertExitCode(t, Run([]string{"--bad-flag"}), 2)
 
-	if code := Run([]string{"--reset"}); code != 0 {
-		t.Fatalf("Run(--reset) = %d, want 0", code)
-	}
+	assertExitCode(t, Run([]string{"--reset"}), 0)
 	if _, err := os.Stat(cfgPath); !os.IsNotExist(err) {
 		t.Fatalf("expected config file removed after --reset")
 	}

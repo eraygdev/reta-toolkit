@@ -10,6 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/config"
 	"github.com/eraygdev/reta-toolkit/internal/retasign"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
@@ -506,31 +507,27 @@ func resolveQuery(query string, projects []string) (string, []string) {
 	return "none", nil
 }
 
-func Run(args []string) int {
-	register := false
-	query := ""
-	querySet := false
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var register bool
+	var showHelp bool
+	parser.Bool(&register, "register", "")
+	parser.Bool(&showHelp, "help", "h")
 
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
-		case "--register":
-			register = true
-		default:
-			if strings.HasPrefix(arg, "-") {
-				fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-				return 2
-			}
-			if !querySet {
-				query = arg
-				querySet = true
-			} else {
-				fmt.Fprintf(os.Stderr, "Error: unexpected argument: %s\n", arg)
-				return 2
-			}
-		}
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printHelp()
+		return nil
+	}
+
+	query := ""
+	if len(pos) == 1 {
+		query = pos[0]
+	} else if len(pos) > 1 {
+		return cli.Exit(2, "unexpected argument: %s", pos[1])
 	}
 
 	projects, idMap := loadAndValidateCache(!register)
@@ -549,7 +546,7 @@ func Run(args []string) int {
 	}
 
 	if register {
-		return 0
+		return nil
 	}
 
 	clearJump()
@@ -560,9 +557,9 @@ func Run(args []string) int {
 		status, matched := resolveQuery(query, projects)
 		if status == "jump" {
 			if writeJump(matched[0]) {
-				return 0
+				return nil
 			}
-			return 1
+			return cli.Exit(1, "")
 		}
 		if status == "none" {
 			discovered := scanHomeForProjects(home, searchDepth)
@@ -570,9 +567,9 @@ func Run(args []string) int {
 			status, matched = resolveQuery(query, projects)
 			if status == "jump" {
 				if writeJump(matched[0]) {
-					return 0
+					return nil
 				}
-				return 1
+				return cli.Exit(1, "")
 			}
 		}
 		if status == "menu" {
@@ -580,7 +577,7 @@ func Run(args []string) int {
 		} else {
 			fmt.Fprintf(os.Stderr, "No project matching '%s'.\n", query)
 			printDepthHint()
-			return 1
+			return cli.Exit(1, "")
 		}
 	} else {
 		discovered := scanHomeForProjects(home, searchDepth)
@@ -591,7 +588,7 @@ func Run(args []string) int {
 	if len(projects) == 0 {
 		fmt.Fprintf(os.Stderr, "%sNo projects found. Run 'reta init' in a project.%s\n", c.Dim, c.Reset)
 		printDepthHint()
-		return 1
+		return cli.Exit(1, "")
 	}
 
 	printProjectList(projects, idMap)
@@ -602,22 +599,22 @@ func Run(args []string) int {
 	choice, err := ui.ReadLine()
 	if err != nil && choice == "" {
 		fmt.Fprintln(os.Stderr, "")
-		return 0
+		return nil
 	}
 	choice = strings.TrimSpace(choice)
 	if choice == "" || strings.ToLower(choice) == "q" {
-		return 0
+		return nil
 	}
 	if idx, err := strconv.Atoi(choice); err == nil {
-		pos := idx - 1
-		if pos >= 0 && pos < len(projects) {
-			if writeJump(projects[pos]) {
-				return 0
+		posIdx := idx - 1
+		if posIdx >= 0 && posIdx < len(projects) {
+			if writeJump(projects[posIdx]) {
+				return nil
 			}
-			return 1
+			return cli.Exit(1, "")
 		}
 	}
 
 	fmt.Fprintln(os.Stderr, "Invalid selection.")
-	return 1
+	return cli.Exit(1, "")
 }

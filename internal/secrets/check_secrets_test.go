@@ -1,11 +1,13 @@
 package secrets
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
@@ -23,6 +25,20 @@ func enterTempRepo(t *testing.T) string {
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv("RETA_HINTS", "off")
 	return tmp
+}
+
+func assertExitCode(t *testing.T, err error, want int) {
+	t.Helper()
+	if want == 0 {
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		return
+	}
+	var exitErr *cli.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != want {
+		t.Fatalf("expected exit code %d, got %v", want, err)
+	}
 }
 
 func TestIsSensitivePathAndBinaryDetection(t *testing.T) {
@@ -98,7 +114,5 @@ func TestRunStagedFromSubdirectory(t *testing.T) {
 	if err := os.Chdir(filepath.Join(root, "sub")); err != nil {
 		t.Fatal(err)
 	}
-	if code := Run([]string{"--staged"}); code != 1 {
-		t.Fatalf("expected --staged to detect secret from subdirectory, got %d", code)
-	}
+	assertExitCode(t, Run([]string{"--staged"}), 1)
 }

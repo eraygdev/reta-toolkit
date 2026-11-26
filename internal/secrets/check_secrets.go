@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/eraygdev/reta-toolkit/internal/cli"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
@@ -284,26 +285,29 @@ func scanStagedBlob(root, relPosix string) []leakFinding {
 	return scanText(relPosix, string(raw))
 }
 
-func Run(args []string) int {
-	staged := false
-	for _, arg := range args {
-		switch arg {
-		case "-h", "--help":
-			printHelp()
-			return 0
-		case "--staged":
-			staged = true
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown option: %s\n", arg)
-			return 2
-		}
+func Run(args []string) error {
+	parser := cli.NewParser()
+	var staged bool
+	var showHelp bool
+	parser.Bool(&staged, "staged", "")
+	parser.Bool(&showHelp, "help", "h")
+
+	pos, err := parser.Parse(args)
+	if err != nil {
+		return err
+	}
+	if showHelp {
+		printHelp()
+		return nil
+	}
+	if len(pos) > 0 {
+		return cli.Exit(2, "unexpected argument: %s", pos[0])
 	}
 
 	c := ui.Colors()
 	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%sError:%s %v\n", c.Red, c.Reset, err)
-		return 1
+		return cli.Wrap(1, err, "")
 	}
 	root, err := filepath.Abs(cwd)
 	if err != nil {
@@ -315,8 +319,7 @@ func Run(args []string) int {
 
 	inGit := isGitRepo(root)
 	if staged && !inGit {
-		fmt.Fprintf(os.Stderr, "%sError:%s --staged requires a git repository.\n", c.Red, c.Reset)
-		return 1
+		return cli.Exit(1, "--staged requires a git repository.")
 	}
 
 	scanRoot := root
@@ -429,9 +432,9 @@ func Run(args []string) int {
 			steps = append(steps, "Move secrets to .env, or add '# check-secrets: ignore' if false positive")
 		}
 		ui.NextSteps(steps)
-		return 1
+		return cli.Exit(1, "")
 	}
 
 	fmt.Printf("%sSummary:%s clean (%d warning(s))\n", c.Green, c.Reset, warnings)
-	return 0
+	return nil
 }
