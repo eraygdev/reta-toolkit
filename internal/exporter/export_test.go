@@ -138,15 +138,43 @@ func TestMatchesIgnoreDirAndFileDistinction(t *testing.T) {
 }
 
 func TestEstimateTokensCodeAndProse(t *testing.T) {
-	code := "func parseUserItems(rawInput string) ([]string, error) {\n\tif rawInput == \"\" {\n\t\treturn nil, nil\n\t}\n\treturn []string{rawInput}, nil\n}\n"
+	numEst := estimateTokens("123456")
+	if numEst.ChatGPT != 2 || numEst.Gemini != 6 || numEst.Claude != 6 {
+		t.Fatalf("unexpected digit token counts for 123456: %+v", numEst)
+	}
+
+	trEst := estimateTokens("Merhaba dünya! 2026")
+	if trEst.ChatGPT < 5 || trEst.ChatGPT > 8 || trEst.Gemini < 7 || trEst.Gemini > 10 || trEst.Claude < 8 || trEst.Claude > 13 {
+		t.Fatalf("unexpected Turkish+digit token counts: %+v", trEst)
+	}
+
+	emojiEst := estimateTokens("👨‍👩‍👧‍👦")
+	if emojiEst.ChatGPT > 6 || emojiEst.Claude > 6 {
+		t.Fatalf("ZWJ emoji inflated token estimate: %+v", emojiEst)
+	}
+
+	jsonEst := estimateTokens(`{"id":123456,"user_name":"eray_dev","active":true}`)
+	if jsonEst.Claude <= jsonEst.ChatGPT {
+		t.Fatalf("expected Claude 4.7+ > ChatGPT on compact JSON: %+v", jsonEst)
+	}
+
+	code := "func get_user_by_id_from_db(userId int, isActiveSession bool) (string, error) {\n\tif userId <= 0 || !isActiveSession {\n\t\treturn \"\", nil\n\t}\n\treturn \"ok\", nil\n}\n"
 	est := estimateTokens(code)
-	if est.ChatGPT <= 0 || est.Claude < est.ChatGPT || est.Gemini < est.Claude {
-		t.Fatalf("unexpected model token ordering for code: %+v", est)
+	if est.ChatGPT <= 0 || est.Gemini <= est.ChatGPT || est.Claude <= est.Gemini {
+		t.Fatalf("unexpected model token counts for code: %+v", est)
+	}
+
+	var sink tokenEstimate
+	allocs := testing.AllocsPerRun(100, func() {
+		sink = estimateTokens(code)
+	})
+	if allocs != 0 || sink.ChatGPT == 0 {
+		t.Fatalf("expected 0 allocations, got %.0f", allocs)
 	}
 
 	prose := "The quick brown fox jumps over the lazy dog."
 	pEst := estimateTokens(prose)
-	if pEst.ChatGPT < 8 || pEst.ChatGPT > 14 {
+	if pEst.ChatGPT < 8 || pEst.ChatGPT > 14 || pEst.Claude < 8 || pEst.Claude > 15 {
 		t.Fatalf("unexpected prose token estimate: %+v", pEst)
 	}
 }

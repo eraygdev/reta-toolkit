@@ -40,6 +40,10 @@ else
 fi
 chmod +x "$BIN_PATH"
 
+if [ "$OS" = "darwin" ] && command -v xattr >/dev/null 2>&1; then
+    xattr -d com.apple.quarantine "$BIN_PATH" 2>/dev/null || true
+fi
+
 "$BIN_PATH" doctor --fix >/dev/null 2>&1 || true
 
 BLOCK_START="# ===RETA*==="

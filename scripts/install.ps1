@@ -35,5 +35,11 @@ if (-not ($ProfileContent -match "RETA\*")) {
     Write-Host "Added rcd integration to $PROFILE"
 }
 
+$CurrentPolicy = Get-ExecutionPolicy -ErrorAction SilentlyContinue
+if ($CurrentPolicy -eq "Restricted") {
+    Write-Host "Warning: PowerShell ExecutionPolicy is 'Restricted'. To allow rcd to load in new terminals, run:" -ForegroundColor Yellow
+    Write-Host "         Set-ExecutionPolicy -Scope CurrentUser RemoteSigned" -ForegroundColor Cyan
+}
+
 Write-Host "Installed reta to $BinPath"
 Write-Host "Run 'reta doctor' in a new PowerShell window to verify."

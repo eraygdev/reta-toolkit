@@ -125,6 +125,20 @@ func Run(args []string) int {
 		}
 	}
 
+	if runtime.GOOS == "darwin" {
+		if exePath, err := os.Executable(); err == nil {
+			if resolved, err := filepath.EvalSymlinks(exePath); err == nil {
+				exePath = resolved
+			}
+			qOut, err := exec.Command("xattr", "-p", "com.apple.quarantine", exePath).Output()
+			if err == nil && len(strings.TrimSpace(string(qOut))) > 0 {
+				checkWarn(fmt.Sprintf("Gatekeeper quarantine active on binary (fix: xattr -d com.apple.quarantine %s)", exePath))
+			} else {
+				checkOK("Gatekeeper quarantine clear")
+			}
+		}
+	}
+
 	if fi, err := os.Lstat(retaRoot); err == nil {
 		if fi.Mode()&os.ModeSymlink != 0 {
 			target, _ := os.Readlink(retaRoot)
@@ -150,6 +164,16 @@ func Run(args []string) int {
 	fmt.Println("")
 	fmt.Println("Shell Integration:")
 	if runtime.GOOS == "windows" {
+		policyOut, pErr := exec.Command("powershell", "-NoProfile", "-Command", "Get-ExecutionPolicy").Output()
+		if pErr == nil {
+			pol := strings.TrimSpace(string(policyOut))
+			if strings.EqualFold(pol, "Restricted") {
+				checkWarn("PowerShell ExecutionPolicy is Restricted (fix: Set-ExecutionPolicy -Scope CurrentUser RemoteSigned)")
+			} else {
+				checkOK(fmt.Sprintf("PowerShell ExecutionPolicy (%s)", pol))
+			}
+		}
+
 		profileOut, err := exec.Command("powershell", "-NoProfile", "-Command", "echo $PROFILE").Output()
 		if err == nil {
 			profPath := strings.TrimSpace(string(profileOut))

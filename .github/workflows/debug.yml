@@ -1,0 +1,29 @@
+name: Interactive Debug
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build binary
+        run: go build -o reta ./cmd/reta
+      - name: Start SSH Session
+        uses: owenthereal/action-upterm@v2
+
+  debug-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build binary
+        run: go build -o reta.exe ./cmd/reta
+      - name: Start SSH Session
+        uses: owenthereal/action-upterm@v2

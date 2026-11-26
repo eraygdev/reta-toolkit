@@ -320,6 +320,16 @@ func cmdKillByPort(port string) int {
 	}
 
 	killed := killPIDs(pids)
+	if killed == 0 && len(pids) > 0 {
+		if runtime.GOOS == "windows" {
+			fmt.Printf("  %sFAIL%s  Could not terminate process(es) on port %s (Permission Denied)\n", c.Red, c.Reset, port)
+			fmt.Println("         Fix: Re-run PowerShell or Terminal as Administrator.")
+		} else {
+			fmt.Printf("  %sFAIL%s  Could not terminate process(es) on port %s (Permission Denied)\n", c.Red, c.Reset, port)
+			fmt.Printf("         Fix: Retry with sudo: sudo reta port kill %s\n", port)
+		}
+		return 1
+	}
 	fmt.Printf("  %sOK%s    Killed %d process(es).\n", c.Green, c.Reset, killed)
 	return 0
 }
@@ -459,7 +469,17 @@ func cmdKillInteractive() int {
 	}
 	if len(pids) > 0 {
 		killed := killPIDs(pids)
-		fmt.Printf("  %sOK%s    killed %d process(es)\n", c.Green, c.Reset, killed)
+		if killed == 0 {
+			if runtime.GOOS == "windows" {
+				fmt.Printf("  %sFAIL%s  Could not terminate process(es) (Permission Denied)\n", c.Red, c.Reset)
+				fmt.Println("         Fix: Re-run PowerShell or Terminal as Administrator.")
+			} else {
+				fmt.Printf("  %sFAIL%s  Could not terminate process(es) (Permission Denied)\n", c.Red, c.Reset)
+				fmt.Println("         Fix: Retry with sudo: sudo reta port kill ...")
+			}
+		} else {
+			fmt.Printf("  %sOK%s    killed %d process(es)\n", c.Green, c.Reset, killed)
+		}
 	}
 	return 0
 }

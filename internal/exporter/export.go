@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/eraygdev/reta-toolkit/internal/ui"
@@ -638,6 +639,68 @@ type tokenEstimate struct {
 	Gemini  int64
 }
 
+func isEmojiModifier(r rune) bool {
+	return r == 0x200D ||
+		(r >= 0xFE00 && r <= 0xFE0F) ||
+		(r >= 0x1F3FB && r <= 0x1F3FF)
+}
+
+func classifyWordRune(s string, idx int) (ok bool, size int, isUnderscore, isUpper, isLatinExt, isOtherScript bool) {
+	b := s[idx]
+	if (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') {
+		return true, 1, false, b >= 'A' && b <= 'Z', false, false
+	}
+	if b == '_' {
+		return true, 1, true, false, false, false
+	}
+	if b >= 0x80 {
+		r, sz := utf8.DecodeRuneInString(s[idx:])
+		if sz <= 0 {
+			sz = 1
+		}
+		if unicode.IsLetter(r) {
+			if r <= 0x024F {
+				return true, sz, false, unicode.IsUpper(r), true, false
+			}
+			return true, sz, false, unicode.IsUpper(r), false, true
+		}
+	}
+	return false, 0, false, false, false, false
+}
+
+func segmentCost(segLen, latinExt, otherScript int, isFirstSeg, afterCamel bool) (dg, dm, dc float64) {
+	if segLen == 0 {
+		return 0, 0, 0
+	}
+	latinLen := segLen - otherScript
+	if latinLen > 0 {
+		base := 1.0
+		if !isFirstSeg {
+			base = 0.85
+		}
+		if latinLen > 5 {
+			base += float64(latinLen-5) / 4.8
+		}
+		dg += base + float64(latinExt)*0.12
+		if isFirstSeg {
+			dm += base*1.04 + float64(latinExt)*0.08
+			dc += base*1.12 + float64(latinExt)*0.32
+		} else if afterCamel {
+			dm += (base+0.07)*1.04 + float64(latinExt)*0.08
+			dc += (base+0.25)*1.10 + float64(latinExt)*0.32
+		} else {
+			dm += base*1.05 + float64(latinExt)*0.08
+			dc += (base+0.12)*1.12 + float64(latinExt)*0.32
+		}
+	}
+	if otherScript > 0 {
+		dg += float64(otherScript) * 0.85
+		dm += float64(otherScript) * 0.75
+		dc += float64(otherScript) * 1.15
+	}
+	return dg, dm, dc
+}
+
 func estimateTokens(text string) tokenEstimate {
 	if len(text) == 0 {
 		return tokenEstimate{}
@@ -648,6 +711,7 @@ func estimateTokens(text string) tokenEstimate {
 	for i := 0; i < n; {
 		b := text[i]
 
+		// Whitespace and newlines
 		if b == '\n' || b == '\r' || b == ' ' || b == '\t' {
 			start := i
 			newlines := 0
@@ -659,75 +723,201 @@ func estimateTokens(text string) tokenEstimate {
 			}
 			wsLen := i - start
 			if newlines == 0 && wsLen == 1 && b == ' ' {
+				if i < n {
+					if ok, _, isUnder, _, _, _ := classifyWordRune(text, i); ok && !isUnder {
+						continue
+					}
+					if text[i] >= '0' && text[i] <= '9' {
+						gpt += 1.0
+						gemini += 1.0
+						claude += 1.0
+						continue
+					}
+					gpt += 0.25
+					gemini += 0.55
+					claude += 0.85
+					continue
+				}
+				gpt += 1.0
+				gemini += 1.0
+				claude += 1.0
 				continue
 			}
+
 			extraWS := wsLen - newlines
-			gpt += float64(newlines)*0.5 + float64(extraWS)/4.0
-			claude += float64(newlines)*0.65 + float64(extraWS)/3.2
-			gemini += float64(newlines)*0.9 + float64(extraWS)/2.2
+			gpt += float64(newlines/2)*1.0 + float64(newlines%2)*0.35 + float64(extraWS)/4.0
+			gemini += float64(newlines)*1.0 + float64(extraWS)/2.4
+			claude += float64(newlines)*1.0 + float64(extraWS)/2.4
 			continue
 		}
 
-		if (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_' {
+		// Digit runs: OpenAI groups up to 3 digits; Gemini and Claude tokenize 1 digit per token.
+		if b >= '0' && b <= '9' {
 			start := i
-			subwords := 1
-			prevLower := b >= 'a' && b <= 'z'
-			i++
-			for i < n {
-				c := text[i]
-				isAlnum := (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_'
-				if !isAlnum {
-					break
-				}
-				if c == '_' || (prevLower && c >= 'A' && c <= 'Z') {
-					subwords++
-				}
-				prevLower = c >= 'a' && c <= 'z'
+			for i < n && text[i] >= '0' && text[i] <= '9' {
 				i++
 			}
-			wLen := i - start
-			base := 1.0
-			if wLen > 5 {
-				base += float64(wLen-5) / 4.8
-			}
-			subScore := float64(subwords) * 0.7
-			if subScore > base {
-				gpt += base + (subScore-base)*0.35
-				claude += base + (subScore-base)*0.5
-				gemini += base + (subScore-base)*0.75
+			dLen := i - start
+			gpt += float64((dLen + 2) / 3)
+			gemini += float64(dLen)
+			claude += float64(dLen)
+			continue
+		}
+
+		// Words and code identifiers (snake_case, camelCase, Latin-Extended, other scripts)
+		if ok, sz, firstUnder, firstUpper, firstLatinExt, firstOther := classifyWordRune(text, i); ok {
+			segLen := 0
+			segLatinExt := 0
+			segOther := 0
+			letterSegs := 0
+			underscores := 0
+			afterCamel := false
+			prevLower := false
+
+			if firstUnder {
+				underscores++
 			} else {
-				gpt += base
-				claude += base * 1.04
-				gemini += base * 1.08
+				segLen = 1
+				if firstLatinExt {
+					segLatinExt = 1
+				}
+				if firstOther {
+					segOther = 1
+				}
+				prevLower = !firstUpper
+			}
+			i += sz
+
+			for i < n {
+				okNext, nextSz, nextUnder, nextUpper, nextLatinExt, nextOther := classifyWordRune(text, i)
+				if !okNext {
+					break
+				}
+				if nextUnder {
+					if segLen > 0 {
+						dg, dm, dc := segmentCost(segLen, segLatinExt, segOther, letterSegs == 0, afterCamel)
+						gpt += dg
+						gemini += dm
+						claude += dc
+						letterSegs++
+						segLen, segLatinExt, segOther = 0, 0, 0
+						afterCamel = false
+					}
+					underscores++
+					gpt += 0.35
+					gemini += 0.70
+					claude += 0.90
+					prevLower = false
+					i += nextSz
+					continue
+				}
+				if prevLower && nextUpper && segLen > 0 {
+					dg, dm, dc := segmentCost(segLen, segLatinExt, segOther, letterSegs == 0, afterCamel)
+					gpt += dg
+					gemini += dm
+					claude += dc
+					letterSegs++
+					segLen, segLatinExt, segOther = 0, 0, 0
+					afterCamel = true
+				}
+				segLen++
+				if nextLatinExt {
+					segLatinExt++
+				}
+				if nextOther {
+					segOther++
+				}
+				prevLower = !nextUpper
+				i += nextSz
+			}
+
+			if segLen > 0 {
+				dg, dm, dc := segmentCost(segLen, segLatinExt, segOther, letterSegs == 0, afterCamel)
+				gpt += dg
+				gemini += dm
+				claude += dc
+				letterSegs++
+			}
+			if letterSegs == 0 && underscores > 0 {
+				gpt += float64(underscores) * 0.90
+				gemini += float64(underscores) * 0.95
+				claude += float64(underscores) * 1.00
+			} else if firstUnder && letterSegs > 0 {
+				gpt += 0.45
+				gemini += 0.75
+				claude += 0.90
 			}
 			continue
 		}
 
+		// Non-ASCII symbols and emoji clusters (ZWJ, variation selectors, Fitzpatrick skin tones)
 		if b >= 0x80 {
-			_, size := utf8.DecodeRuneInString(text[i:])
+			r, size := utf8.DecodeRuneInString(text[i:])
 			if size <= 0 {
 				size = 1
 			}
 			i += size
-			gpt += 1.2
-			claude += 1.3
-			gemini += 1.4
+			if isEmojiModifier(r) {
+				gpt += 0.5
+				gemini += 0.5
+				claude += 0.5
+				continue
+			}
+			if r > 0x024F {
+				gpt += 1.5
+				gemini += 1.4
+				claude += 1.8
+				for i < n {
+					nr, nsz := utf8.DecodeRuneInString(text[i:])
+					if nsz <= 0 {
+						break
+					}
+					if isEmojiModifier(nr) {
+						i += nsz
+						gpt += 0.5
+						gemini += 0.5
+						claude += 0.5
+						if nr == 0x200D && i < n {
+							jr, jsz := utf8.DecodeRuneInString(text[i:])
+							if jsz > 0 && jr >= 0x80 && !unicode.IsSpace(jr) {
+								i += jsz
+								gpt += 0.5
+								gemini += 0.5
+								claude += 0.5
+							}
+						}
+						continue
+					}
+					break
+				}
+				continue
+			}
+			gpt += 1.0
+			gemini += 1.0
+			claude += 1.15
 			continue
 		}
 
+		// ASCII punctuation / operator runs
 		start := i
 		for i < n {
 			c := text[i]
 			if c >= 0x80 || c == ' ' || c == '\t' || c == '\n' || c == '\r' ||
-				(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' {
+				(c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_' {
 				break
 			}
 			i++
 		}
 		pLen := i - start
-		gpt += 0.55 + float64(pLen)*0.4
-		claude += 0.60 + float64(pLen)*0.48
-		gemini += 0.65 + float64(pLen)*0.65
+		if pLen == 1 {
+			gpt += 0.85
+			gemini += 0.95
+			claude += 1.05
+		} else {
+			gpt += 0.45 + float64(pLen)*0.35
+			gemini += 0.60 + float64(pLen)*0.55
+			claude += 0.75 + float64(pLen)*0.85
+		}
 	}
 
 	return tokenEstimate{
@@ -980,8 +1170,8 @@ func Run(args []string) int {
 	fmt.Println("\nDone.")
 	fmt.Printf("Files:  %d included, %d skipped, %d dirs summarized, Total: %s\n",
 		written, len(skipped), len(summaries), humanSize(float64(total)))
-	fmt.Printf("Tokens: ~%s ChatGPT | ~%s Claude | ~%s Gemini (estimated)\n",
-		formatCommas(est.ChatGPT), formatCommas(est.Claude), formatCommas(est.Gemini))
+	fmt.Printf("Tokens: ~%s ChatGPT (o200k) | ~%s Gemini | ~%s Claude 4.7+ (est.)\n",
+		formatCommas(est.ChatGPT), formatCommas(est.Gemini), formatCommas(est.Claude))
 	fmt.Printf("Output: %s\n", output)
 
 	if sizeMB > warnMB {
