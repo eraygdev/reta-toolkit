@@ -468,13 +468,15 @@ func resolveOutputFromDir(root, exportDir string) string {
 
 func isDangerousPath(p string) bool {
 	clean := filepath.Clean(p)
+	resolved := resolveAbs(p)
 	if home, err := os.UserHomeDir(); err == nil {
+		homeClean := filepath.Clean(home)
 		homeResolved := resolveAbs(home)
 		if runtime.GOOS == "windows" {
-			if strings.EqualFold(clean, homeResolved) {
+			if strings.EqualFold(clean, homeClean) || strings.EqualFold(resolved, homeResolved) {
 				return true
 			}
-		} else if clean == homeResolved {
+		} else if clean == homeClean || resolved == homeResolved {
 			return true
 		}
 	}

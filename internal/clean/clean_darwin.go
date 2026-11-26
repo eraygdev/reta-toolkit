@@ -127,7 +127,7 @@ func runPlatformClean() int {
 		pct := (float64(freedKB) / float64(totalKB)) * 100
 		fmt.Printf("    • Disk Space Freed : %s%.1f MB%s (%.2f%%)\n\n", c.Green, float64(freedKB)/1024, c.Reset, pct)
 	} else {
-		fmt.Println("    • Disk Space Freed : 0 B (No net change)\n")
+		fmt.Print("    • Disk Space Freed : 0 B (No net change)\n\n")
 	}
 
 	fmt.Printf("  %sOK%s    System cleanup completed.\n", c.Green, c.Reset)
