@@ -1,11 +1,15 @@
 # reta
 
-> Personal developer toolkit for scaffolding projects, managing secrets, automating shared workflows, and preparing AI context.
+> Personal developer toolkit for scaffolding projects, managing secrets, and automating shared workflows.
 
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Go](https://img.shields.io/badge/go-1.26+-00ADD8?logo=go&logoColor=white)]()
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)]()
 [![Test Suite](https://github.com/eraygdev/reta-toolkit/actions/workflows/test.yml/badge.svg)](https://github.com/eraygdev/reta-toolkit/actions/workflows/test.yml)
+[![GitHub All Releases](https://img.shields.io/github/downloads/eraygdev/reta-toolkit/total.svg)](https://github.com/eraygdev/reta-toolkit/releases)
+[![Linux Downloads](https://img.shields.io/github/downloads/eraygdev/reta-toolkit/latest/reta-linux-amd64?label=linux%20downloads)](https://github.com/eraygdev/reta-toolkit/releases)
+[![macOS Downloads](https://img.shields.io/github/downloads/eraygdev/reta-toolkit/latest/reta-darwin-amd64?label=macos%20downloads)](https://github.com/eraygdev/reta-toolkit/releases)
+[![Windows Downloads](https://img.shields.io/github/downloads/eraygdev/reta-toolkit/latest/reta-windows-amd64.exe?label=windows%20downloads)](https://github.com/eraygdev/reta-toolkit/releases)
 
 ---
 
