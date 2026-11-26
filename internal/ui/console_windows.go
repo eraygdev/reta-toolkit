@@ -8,9 +8,11 @@ import (
 	"golang.org/x/sys/windows"
 )
 
+const cpUTF8 = 65001
+
 func init() {
-	_ = windows.SetConsoleOutputCP(windows.CP_UTF8)
-	_ = windows.SetConsoleCP(windows.CP_UTF8)
+	_ = windows.SetConsoleOutputCP(cpUTF8)
+	_ = windows.SetConsoleCP(cpUTF8)
 
 	stdout := windows.Handle(os.Stdout.Fd())
 	var mode uint32
