@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func setTempHome(t *testing.T) string {
@@ -15,6 +17,7 @@ func setTempHome(t *testing.T) string {
 }
 
 func TestConfigLoadSaveAndValidation(t *testing.T) {
+	testutil.SilenceStdio(t)
 	home := setTempHome(t)
 
 	cfg := Load()

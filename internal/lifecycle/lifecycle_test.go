@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func TestExpectedAssetName(t *testing.T) {
@@ -48,6 +50,7 @@ func TestReplaceBinary(t *testing.T) {
 }
 
 func TestRunUpdateAndUninstallFlags(t *testing.T) {
+	testutil.SilenceStdio(t)
 	if code := RunUpdate([]string{"--help"}); code != 0 {
 		t.Fatalf("RunUpdate(--help) = %d, want 0", code)
 	}
@@ -87,6 +90,7 @@ func setupFakeUninstallEnv(t *testing.T) (home, retaRoot, binPath string) {
 }
 
 func TestRunUninstallKeepAndFull(t *testing.T) {
+	testutil.SilenceStdio(t)
 	home, retaRoot, binPath := setupFakeUninstallEnv(t)
 	if err := os.MkdirAll(filepath.Join(retaRoot, "lib"), 0o755); err != nil {
 		t.Fatal(err)
@@ -121,6 +125,7 @@ func TestRunUninstallKeepAndFull(t *testing.T) {
 }
 
 func TestRunUninstallSafetyAndSymlink(t *testing.T) {
+	testutil.SilenceStdio(t)
 	_, retaRoot, _ := setupFakeUninstallEnv(t)
 	if err := os.MkdirAll(retaRoot, 0o755); err != nil {
 		t.Fatal(err)

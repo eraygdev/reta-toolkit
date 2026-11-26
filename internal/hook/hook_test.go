@@ -4,10 +4,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func TestHookInstallStatusRemoveFromSubdir(t *testing.T) {
+	testutil.SilenceStdio(t)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
@@ -49,6 +53,14 @@ func TestHookInstallStatusRemoveFromSubdir(t *testing.T) {
 	if code := Run([]string{"status"}); code != 0 {
 		t.Fatalf("hook status = %d", code)
 	}
+	data, err := os.ReadFile(hookFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "check-secrets --staged") {
+		t.Fatalf("hook script must invoke 'check-secrets --staged':\n%s", string(data))
+	}
+
 	if code := Run([]string{"remove"}); code != 0 {
 		t.Fatalf("hook remove = %d", code)
 	}

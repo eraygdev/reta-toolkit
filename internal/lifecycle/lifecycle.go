@@ -1,7 +1,6 @@
 package lifecycle
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -142,6 +141,9 @@ func updateFromGitRepo(retaRoot string) int {
 			}
 			fmt.Printf("  %sOK%s    Updated binary at %s\n", c.Green, c.Reset, exePath)
 		}
+	} else {
+		fmt.Printf("\n  %sWARN%s  'go' not found on PATH; source updated, but binary was not rebuilt.\n", c.Yellow, c.Reset)
+		fmt.Println("         Run 'reta update --binary' to update the binary.")
 	}
 	return 0
 }
@@ -363,11 +365,7 @@ func RunUninstall(args []string) int {
 
 	if !assumeYes {
 		fmt.Printf("\nAbout to delete: %s\n", retaRoot)
-		fmt.Print("Continue? [y/N] ")
-		reader := bufio.NewReader(os.Stdin)
-		ans, _ := reader.ReadString('\n')
-		ans = strings.ToLower(strings.TrimSpace(ans))
-		if ans != "y" && ans != "yes" {
+		if !ui.ConfirmYes(os.Stdout, "Continue? [y/N] ") {
 			ui.PrintDim(os.Stdout, "Cancelled.")
 			return 0
 		}

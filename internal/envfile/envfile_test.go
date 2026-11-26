@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func enterTempDir(t *testing.T) string {
@@ -52,6 +54,7 @@ func TestParseEnvFileCRLFQuotesAndDuplicates(t *testing.T) {
 }
 
 func TestRunInitEnvAndEnvSubcommands(t *testing.T) {
+	testutil.SilenceStdio(t)
 	enterTempDir(t)
 
 	example := strings.Join([]string{
@@ -123,5 +126,57 @@ func TestRunInitEnvAndEnvSubcommands(t *testing.T) {
 	}
 	if strings.Contains(synced, "# ignored comment") {
 		t.Fatalf("inline comment leaked into synced value:\n%s", synced)
+	}
+}
+
+func TestInlineCommentsQuotedValuesAndUrls(t *testing.T) {
+	testutil.SilenceStdio(t)
+	enterTempDir(t)
+
+	example := strings.Join([]string{
+		"PORT=8080 # server port",
+		`COLOR="#ffffff" # hex color`,
+		"DOC_URL=https://example.com#section",
+		"EMPTY_COMMENTED= # fill later",
+		`QUOTED_SECRET="GENERATE_SECRET"`,
+	}, "\n") + "\n"
+	if err := os.WriteFile(".env.example", []byte(example), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := RunInitEnv(nil); code != 0 {
+		t.Fatalf("RunInitEnv() = %d", code)
+	}
+	initBytes, _ := os.ReadFile(".env")
+	if !strings.Contains(string(initBytes), `QUOTED_SECRET="GENERATE_SECRET"`) {
+		t.Fatalf("quoted GENERATE_SECRET should remain literal:\n%s", string(initBytes))
+	}
+
+	// EMPTY_COMMENTED is empty -> check must fail with 1
+	if code := RunEnv([]string{"check"}); code != 1 {
+		t.Fatalf("RunEnv(check) with EMPTY_COMMENTED = %d, want 1", code)
+	}
+
+	// Verify sync strips trailing comments on unquoted defaults and preserves URL fragments
+	if err := os.WriteFile(".env", []byte("EMPTY_COMMENTED=ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code := RunEnv([]string{"sync"}); code != 0 {
+		t.Fatalf("RunEnv(sync) = %d, want 0", code)
+	}
+	syncedBytes, _ := os.ReadFile(".env")
+	synced := string(syncedBytes)
+	for _, want := range []string{
+		"PORT=8080\n",
+		`COLOR="#ffffff"` + "\n",
+		"DOC_URL=https://example.com#section\n",
+		`QUOTED_SECRET="GENERATE_SECRET"`,
+	} {
+		if !strings.Contains(synced, want) {
+			t.Fatalf("synced .env missing %q:\n%s", want, synced)
+		}
+	}
+	if strings.Contains(synced, "# server port") || strings.Contains(synced, "# hex color") {
+		t.Fatalf("inline comment leaked into synced .env:\n%s", synced)
 	}
 }

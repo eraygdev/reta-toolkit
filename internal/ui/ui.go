@@ -62,11 +62,14 @@ func readConfigValue(key string) string {
 		return ""
 	}
 	val := ""
-	prefix := key + "="
 	for _, raw := range strings.Split(string(data), "\n") {
 		line := strings.TrimSpace(raw)
-		if strings.HasPrefix(line, prefix) {
-			val = strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
+			continue
+		}
+		k, v, _ := strings.Cut(line, "=")
+		if strings.TrimSpace(k) == key {
+			val = strings.TrimSpace(v)
 		}
 	}
 	return val
@@ -76,6 +79,8 @@ func HintsEnabled() bool {
 	switch strings.ToLower(os.Getenv("RETA_HINTS")) {
 	case "off", "false", "0", "no":
 		return false
+	case "on", "true", "1", "yes":
+		return true
 	}
 	return readConfigValue("hints") != "off"
 }
@@ -104,6 +109,39 @@ func NextSteps(steps []string) {
 	for _, step := range steps {
 		fmt.Printf("  → %s\n", step)
 	}
+}
+
+// ReadLine reads a single line from stdin without buffering past the newline.
+func ReadLine() (string, error) {
+	var buf [1]byte
+	var line []byte
+	for {
+		n, err := os.Stdin.Read(buf[:])
+		if n > 0 {
+			if buf[0] == '\n' {
+				return strings.TrimSuffix(string(line), "\r"), nil
+			}
+			line = append(line, buf[0])
+		}
+		if err != nil {
+			if len(line) > 0 {
+				return strings.TrimSuffix(string(line), "\r"), nil
+			}
+			return "", err
+		}
+	}
+}
+
+func ConfirmYes(w io.Writer, prompt string) bool {
+	if prompt != "" {
+		fmt.Fprint(w, prompt)
+	}
+	line, err := ReadLine()
+	if err != nil && line == "" {
+		return false
+	}
+	ans := strings.ToLower(strings.TrimSpace(line))
+	return ans == "y" || ans == "yes"
 }
 
 func NotInstalled() {

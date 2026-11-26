@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	reta "github.com/eraygdev/reta-toolkit"
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func TestIsOnPath(t *testing.T) {
@@ -60,6 +61,7 @@ func TestEnsureBaseMK(t *testing.T) {
 }
 
 func TestDoctorRunFlagsAndFix(t *testing.T) {
+	testutil.SilenceStdio(t)
 	t.Setenv("NO_COLOR", "1")
 	if code := Run([]string{"--help"}); code != 0 {
 		t.Fatalf("Run(--help) = %d, want 0", code)

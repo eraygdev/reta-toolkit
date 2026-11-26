@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func TestParseSizeAndFnmatch(t *testing.T) {
@@ -78,6 +80,7 @@ func TestDecodeTextLatin1Fallback(t *testing.T) {
 }
 
 func TestRunExportFilteringAndExportignore(t *testing.T) {
+	testutil.SilenceStdio(t)
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
 		t.Fatal(err)
@@ -117,5 +120,19 @@ func TestRunExportFilteringAndExportignore(t *testing.T) {
 	}
 	if !strings.Contains(content, "## `data/`") {
 		t.Fatalf("expected data/ summary entry in export")
+	}
+}
+
+func TestMatchesIgnoreDirAndFileDistinction(t *testing.T) {
+	patterns := []string{"src/generated", "keepfile/"}
+
+	if !matchesIgnore("src/generated", true, patterns) {
+		t.Fatal("directory pattern without trailing slash should match directory")
+	}
+	if matchesIgnore("keepfile", false, patterns) {
+		t.Fatal("trailing-slash directory pattern must not match a regular file")
+	}
+	if !matchesIgnore("keepfile", true, patterns) {
+		t.Fatal("trailing-slash directory pattern must match directory")
 	}
 }

@@ -17,44 +17,11 @@ func collectPorts() ([]portEntry, error) {
 	if _, err := exec.LookPath("lsof"); err != nil {
 		return nil, fmt.Errorf("lsof is not available")
 	}
-	dkrMap := dockerPortMap()
-	seen := make(map[string]bool)
-	var entries []portEntry
-
 	out, err := exec.Command("lsof", "-i", "-P", "-n").Output()
 	if err != nil {
-		return entries, nil
+		return nil, nil
 	}
-	for i, line := range strings.Split(string(out), "\n") {
-		if i == 0 || !strings.Contains(line, "LISTEN") {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		addr := ""
-		p := ""
-		for _, f := range fields {
-			if idx := strings.LastIndex(f, ":"); idx >= 0 && idx+1 < len(f) {
-				cand := f[idx+1:]
-				if _, err := strconv.Atoi(cand); err == nil {
-					p = cand
-					addr = f
-				}
-			}
-		}
-		if p == "" || seen[p] {
-			continue
-		}
-		seen[p] = true
-		if cname, ok := dkrMap[p]; ok {
-			entries = append(entries, portEntry{Port: p, Command: cname, PID: "docker", Addr: addr})
-		} else {
-			entries = append(entries, portEntry{Port: p, Command: fields[0], PID: fields[1], Addr: addr})
-		}
-	}
-	return entries, nil
+	return parseLsofListen(string(out), dockerPortMap()), nil
 }
 
 func collectPIDsForPort(port string) []string {

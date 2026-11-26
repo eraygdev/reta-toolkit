@@ -5,6 +5,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func enterTempRepo(t *testing.T) string {
@@ -64,6 +66,7 @@ func TestScanTextAndIgnoreMarker(t *testing.T) {
 }
 
 func TestRunStagedFromSubdirectory(t *testing.T) {
+	testutil.SilenceStdio(t)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}

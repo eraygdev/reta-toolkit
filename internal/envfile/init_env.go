@@ -87,7 +87,8 @@ func RunInitEnv(args []string) int {
 	fmt.Printf("  output: %s\n", outputPath)
 	fmt.Println()
 
-	text := strings.TrimSuffix(strings.ReplaceAll(string(rawData), "\r\n", "\n"), "\n")
+	cleanedRaw := strings.TrimPrefix(string(rawData), "\xef\xbb\xbf")
+	text := strings.TrimSuffix(strings.ReplaceAll(cleanedRaw, "\r\n", "\n"), "\n")
 	rawLines := strings.Split(text, "\n")
 	outputLines := make([]string, 0, len(rawLines))
 	secretCount, hashCount, promptCount, skipCount := 0, 0, 0, 0
@@ -111,8 +112,11 @@ func RunInitEnv(args []string) int {
 
 			key, value, _ := strings.Cut(lineBody, "=")
 			key = strings.TrimRight(key, " \t")
-			val := strings.TrimSpace(value)
-			marker := strings.TrimSpace(strings.SplitN(val, "#", 2)[0])
+			_, marker, isQuoted := splitEnvValue(value)
+			if isQuoted {
+				outputLines = append(outputLines, rawLine)
+				continue
+			}
 
 			switch marker {
 			case "GENERATE_SECRET":

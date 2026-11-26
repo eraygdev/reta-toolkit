@@ -1,8 +1,13 @@
 package port
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
+)
 
 func TestPortClassAndValidation(t *testing.T) {
+	testutil.SilenceStdio(t)
 	cases := []struct {
 		port string
 		pid  string
@@ -39,7 +44,19 @@ func TestServiceNameForWellKnownPorts(t *testing.T) {
 	}
 }
 
+func TestParseDockerPortMappingsIgnoresUDP(t *testing.T) {
+	raw := "web|0.0.0.0:8080->80/tcp, [::]:8443->443/tcp\nmdns|0.0.0.0:5353->5353/udp\n"
+	got := parseDockerPortMappings(raw)
+	if got["8080"] != "web" || got["8443"] != "web" {
+		t.Fatalf("unexpected TCP docker mappings: %v", got)
+	}
+	if _, exists := got["5353"]; exists {
+		t.Fatalf("UDP mapping must not mask TCP port 5353: %v", got)
+	}
+}
+
 func TestRunHelpAndUnknownSubcommand(t *testing.T) {
+	testutil.SilenceStdio(t)
 	if code := Run([]string{"--help"}); code != 0 {
 		t.Fatalf("Run(--help) = %d, want 0", code)
 	}

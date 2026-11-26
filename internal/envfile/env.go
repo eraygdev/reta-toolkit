@@ -168,11 +168,12 @@ func cmdSync(example, env parsedEnv, envPath string, dryRun bool) int {
 	newLines := make([]string, 0, len(missing))
 	for _, k := range missing {
 		val := example.RawValues[k]
-		isQuoted := len(val) >= 2 && val[0] == val[len(val)-1] && (val[0] == '\'' || val[0] == '"')
-		marker := val
-		if !isQuoted {
-			marker = strings.TrimSpace(strings.SplitN(val, "#", 2)[0])
+		if example.Quoted[k] {
+			fmt.Printf("  %sadded%s %s%s%s\n", c.Green, c.Reset, c.Cyan, k, c.Reset)
+			newLines = append(newLines, fmt.Sprintf("%s=%s", k, val))
+			continue
 		}
+		marker := val
 
 		var resolved string
 		switch marker {
@@ -213,7 +214,7 @@ func cmdSync(example, env parsedEnv, envPath string, dryRun bool) int {
 				fmt.Printf("  %sskip%s %s\n", c.Yellow, c.Reset, k)
 			}
 		default:
-			resolved = val
+			resolved = marker
 			fmt.Printf("  %sadded%s %s%s%s\n", c.Green, c.Reset, c.Cyan, k, c.Reset)
 		}
 		newLines = append(newLines, fmt.Sprintf("%s=%s", k, resolved))

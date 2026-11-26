@@ -1,7 +1,6 @@
 package clean
 
 import (
-	"bufio"
 	"fmt"
 	"io/fs"
 	"os"
@@ -20,11 +19,7 @@ func printHelp() {
 }
 
 func confirmYes(prompt string) bool {
-	fmt.Print(prompt)
-	reader := bufio.NewReader(os.Stdin)
-	ans, _ := reader.ReadString('\n')
-	ans = strings.ToLower(strings.TrimSpace(ans))
-	return ans == "y" || ans == "yes"
+	return ui.ConfirmYes(os.Stdout, prompt)
 }
 
 func cleanPythonCaches(home string) {

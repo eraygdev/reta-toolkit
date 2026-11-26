@@ -1,10 +1,10 @@
 package search
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -138,7 +138,6 @@ func loadAndValidateCache(promptMissing bool) ([]string, map[string]string) {
 	var paths []string
 	seen := make(map[string]bool)
 	dirty := false
-	reader := bufio.NewReader(os.Stdin)
 
 	for _, line := range rawLines {
 		stripped := strings.TrimSpace(line)
@@ -172,7 +171,7 @@ func loadAndValidateCache(promptMissing bool) ([]string, map[string]string) {
 
 		fmt.Fprintf(os.Stderr, "%sWarn:%s %s missing .retasign\n", c.Yellow, c.Reset, resolved)
 		fmt.Fprint(os.Stderr, "[y/N] Add signature? (No removes from cache) ")
-		ans, readErr := reader.ReadString('\n')
+		ans, readErr := ui.ReadLine()
 		if readErr != nil && ans == "" {
 			fmt.Fprintln(os.Stderr, "")
 			seen[resolved] = true
@@ -239,8 +238,17 @@ func scanHomeForProjects(root string, maxDepth int) map[string]string {
 			continue
 		}
 		for _, entry := range entries {
-			if scanSkipDirs[entry.Name()] {
+			name := entry.Name()
+			if scanSkipDirs[name] {
 				continue
+			}
+			if cur.depth == 0 {
+				if runtime.GOOS == "darwin" && name == "Library" {
+					continue
+				}
+				if runtime.GOOS == "windows" && strings.EqualFold(name, "AppData") {
+					continue
+				}
 			}
 			if entry.Type()&os.ModeSymlink != 0 || !entry.IsDir() {
 				continue
@@ -380,8 +388,7 @@ func writeJump(target string) bool {
 	if retasign.ReadSignatureID(resolved) == "" {
 		fmt.Fprintf(os.Stderr, "%sWarn:%s %s missing .retasign\n", c.Yellow, c.Reset, resolved)
 		fmt.Fprint(os.Stderr, "[y/N] Add signature? (No removes from cache) ")
-		reader := bufio.NewReader(os.Stdin)
-		ans, readErr := reader.ReadString('\n')
+		ans, readErr := ui.ReadLine()
 		if readErr != nil && ans == "" {
 			fmt.Fprintln(os.Stderr, "")
 			return false
@@ -592,8 +599,7 @@ func Run(args []string) int {
 	printDepthHint()
 
 	fmt.Fprintf(os.Stderr, "\n%sSelect (1-%d, or q):%s ", c.Bold, len(projects), c.Reset)
-	reader := bufio.NewReader(os.Stdin)
-	choice, err := reader.ReadString('\n')
+	choice, err := ui.ReadLine()
 	if err != nil && choice == "" {
 		fmt.Fprintln(os.Stderr, "")
 		return 0

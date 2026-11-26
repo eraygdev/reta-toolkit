@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/eraygdev/reta-toolkit/internal/retasign"
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func TestIsSkippedPathCrossPlatform(t *testing.T) {
@@ -32,6 +33,7 @@ func TestIsSkippedPathCrossPlatform(t *testing.T) {
 }
 
 func TestResolveQueryAndDepthDiscovery(t *testing.T) {
+	testutil.SilenceStdio(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
@@ -85,5 +87,33 @@ func TestResolveQueryAndDepthDiscovery(t *testing.T) {
 	}
 	if strings.TrimSpace(string(jfData)) != resolvePath(projA) {
 		t.Fatalf("jump file = %q, want %q", string(jfData), resolvePath(projA))
+	}
+}
+
+func TestLoadAndValidateCachePrunesDeadAndUnsigned(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+
+	valid := filepath.Join(home, "valid")
+	unsigned := filepath.Join(home, "unsigned")
+	missing := filepath.Join(home, "missing")
+	for _, p := range []string{valid, unsigned} {
+		if err := os.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sig, err := retasign.WriteSignature(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	saveProjects([]string{valid, unsigned, missing})
+	paths, idMap := loadAndValidateCache(false)
+	if len(paths) != 1 || paths[0] != resolvePath(valid) {
+		t.Fatalf("expected only valid project, got %v", paths)
+	}
+	if idMap[resolvePath(valid)] != sig {
+		t.Fatalf("unexpected signature id: %v", idMap)
 	}
 }

@@ -1,7 +1,6 @@
 package exporter
 
 import (
-	"bufio"
 	"bytes"
 	"fmt"
 	"os"
@@ -12,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/eraygdev/reta-toolkit/internal/ui"
 )
 
 var includeExt = map[string]bool{
@@ -262,21 +263,32 @@ func loadExportignore(root string) []string {
 	return rules
 }
 
-func matchesIgnore(relPosix string, patterns []string) bool {
-	baseName := filepath.Base(filepath.FromSlash(relPosix))
+func matchesIgnore(relPosix string, isDir bool, patterns []string) bool {
+	relClean := strings.TrimRight(relPosix, "/")
+	baseName := filepath.Base(filepath.FromSlash(relClean))
 	for _, pat := range patterns {
 		if strings.HasSuffix(pat, "/") {
+			if !isDir {
+				continue
+			}
 			base := strings.TrimRight(pat, "/")
-			if relPosix == base || strings.HasPrefix(relPosix, base+"/") {
+			if relClean == base || strings.HasPrefix(relClean, base+"/") {
 				return true
 			}
-		} else if fnmatch(pat, relPosix) {
+		} else if fnmatch(pat, relClean) {
 			return true
 		} else if !strings.Contains(pat, "/") && fnmatch(pat, baseName) {
 			return true
 		}
 	}
 	return false
+}
+
+func samePath(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 func isExcludedFile(path string) bool {
@@ -370,7 +382,7 @@ func scanProject(root string, include, exportignore []string, skipAbs string) ([
 			if entry.IsDir() {
 				if name != ".github" {
 					if summaryDirs[name] {
-						if !matchesIgnore(relPosix+"/", exportignore) {
+						if !matchesIgnore(relPosix, true, exportignore) {
 							summaries = append(summaries, sizedPath{Path: full, Size: dirTotalSize(full)})
 						}
 						continue
@@ -379,7 +391,7 @@ func scanProject(root string, include, exportignore []string, skipAbs string) ([
 						continue
 					}
 				}
-				if matchesIgnore(relPosix+"/", exportignore) {
+				if matchesIgnore(relPosix, true, exportignore) {
 					continue
 				}
 				stack = append(stack, full)
@@ -393,10 +405,10 @@ func scanProject(root string, include, exportignore []string, skipAbs string) ([
 			if resolved, err := filepath.EvalSymlinks(absFull); err == nil {
 				absFull = resolved
 			}
-			if absFull == skipAbs {
+			if samePath(absFull, skipAbs) {
 				continue
 			}
-			if matchesIgnore(relPosix, exportignore) {
+			if matchesIgnore(relPosix, false, exportignore) {
 				continue
 			}
 			if isExcludedFile(full) {
@@ -572,15 +584,7 @@ func cleanExportsDir(root, targetDir string) int {
 	}
 
 	fmt.Printf("About to delete %s (%s) inside: %s/\n", detail, humanSize(float64(totalBytes)), targetResolved)
-	fmt.Print("Continue? [y/N] ")
-	reader := bufio.NewReader(os.Stdin)
-	ans, err := reader.ReadString('\n')
-	if err != nil && ans == "" {
-		fmt.Println("\nCancelled.")
-		return 0
-	}
-	ans = strings.ToLower(strings.TrimSpace(ans))
-	if ans != "y" && ans != "yes" {
+	if !ui.ConfirmYes(os.Stdout, "Continue? [y/N] ") {
 		fmt.Println("Cancelled.")
 		return 0
 	}

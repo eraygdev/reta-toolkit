@@ -1,8 +1,13 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
+)
 
 func TestCommandsRegistryAndHelp(t *testing.T) {
+	testutil.SilenceStdio(t)
 	t.Setenv("NO_COLOR", "1")
 	t.Setenv("RETA_HINTS", "off")
 

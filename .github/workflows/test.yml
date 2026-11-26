@@ -45,3 +45,15 @@ jobs:
 
       - name: Run Go unit tests
         run: go test -v ./...
+
+      - name: Run Unix runtime and CLI integration suite
+        if: runner.os != 'Windows'
+        run: ./tests/run.sh
+
+      - name: Run Windows PowerShell runtime suite
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          go build -o reta.exe ./cmd/reta
+          ./tests/test_windows.ps1
+          Remove-Item -Force reta.exe

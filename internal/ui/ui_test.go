@@ -72,6 +72,49 @@ func TestHintsAndLearnConfigAndEnvOverrides(t *testing.T) {
 	if HintsEnabled() {
 		t.Fatal("expected RETA_HINTS=0 to disable hints")
 	}
+
+	t.Setenv("RETA_HINTS", "on")
+	if !HintsEnabled() {
+		t.Fatal("expected RETA_HINTS=on to override hints=off in config")
+	}
+
+	t.Setenv("RETA_HINTS", "")
+	t.Setenv("RETA_LEARN", "")
+	if err := os.WriteFile(cfgPath, []byte("hints = off\nlearn = on\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if HintsEnabled() || !LearnEnabled() {
+		t.Fatal("expected config parser to tolerate whitespace around '='")
+	}
+}
+
+func TestReadLineAndConfirmYesSequentialStdin(t *testing.T) {
+	origStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		os.Stdin = origStdin
+		_ = r.Close()
+	})
+	os.Stdin = r
+
+	go func() {
+		_, _ = w.Write([]byte("first\r\nyes\nno\n"))
+		_ = w.Close()
+	}()
+
+	line, err := ReadLine()
+	if err != nil || line != "first" {
+		t.Fatalf("ReadLine() = (%q, %v), want (%q, nil)", line, err, "first")
+	}
+	if !ConfirmYes(io.Discard, "") {
+		t.Fatal("expected first ConfirmYes to read 'yes'")
+	}
+	if ConfirmYes(io.Discard, "") {
+		t.Fatal("expected second ConfirmYes to read 'no'")
+	}
 }
 
 func TestNextStepsOutputAndSuppression(t *testing.T) {

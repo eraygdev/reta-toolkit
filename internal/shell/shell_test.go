@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func captureStdout(t *testing.T, fn func() int) (int, string) {
@@ -26,6 +28,7 @@ func captureStdout(t *testing.T, fn func() int) (int, string) {
 }
 
 func TestRunShellInitOutputs(t *testing.T) {
+	testutil.SilenceStdio(t)
 	for _, sh := range []string{"bash", "zsh"} {
 		code, out := captureStdout(t, func() int {
 			return RunShellInit([]string{sh})
@@ -54,6 +57,7 @@ func TestRunShellInitOutputs(t *testing.T) {
 }
 
 func TestRunCompletionOutputs(t *testing.T) {
+	testutil.SilenceStdio(t)
 	tests := []struct {
 		shell string
 		want  string

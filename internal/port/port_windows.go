@@ -6,7 +6,6 @@ import (
 	"encoding/csv"
 	"fmt"
 	"os/exec"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,22 +13,11 @@ import (
 )
 
 func windowsTaskMap() map[string]string {
-	procMap := make(map[string]string)
 	out, err := exec.Command("tasklist", "/FO", "CSV", "/NH").Output()
 	if err != nil {
-		return procMap
+		return make(map[string]string)
 	}
-	r := csv.NewReader(strings.NewReader(string(out)))
-	rows, err := r.ReadAll()
-	if err != nil {
-		return procMap
-	}
-	for _, row := range rows {
-		if len(row) >= 2 {
-			procMap[strings.TrimSpace(row[1])] = strings.TrimSuffix(strings.TrimSpace(row[0]), ".exe")
-		}
-	}
-	return procMap
+	return parseWindowsTasklistCSV(string(out))
 }
 
 func collectPorts() ([]portEntry, error) {
@@ -37,45 +25,7 @@ func collectPorts() ([]portEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to run netstat: %w", err)
 	}
-	dkrMap := dockerPortMap()
-	taskMap := windowsTaskMap()
-	seen := make(map[string]bool)
-	var entries []portEntry
-
-	for _, raw := range strings.Split(string(out), "\n") {
-		fields := strings.Fields(raw)
-		if len(fields) < 5 {
-			continue
-		}
-		if !strings.EqualFold(fields[0], "TCP") || !strings.EqualFold(fields[3], "LISTENING") {
-			continue
-		}
-		addr := fields[1]
-		idx := strings.LastIndex(addr, ":")
-		if idx < 0 || idx+1 >= len(addr) {
-			continue
-		}
-		p := addr[idx+1:]
-		if _, err := strconv.Atoi(p); err != nil || seen[p] {
-			continue
-		}
-		seen[p] = true
-
-		if cname, ok := dkrMap[p]; ok {
-			entries = append(entries, portEntry{Port: p, Command: cname, PID: "docker", Addr: addr})
-			continue
-		}
-		pid := fields[4]
-		proc := taskMap[pid]
-		if proc == "" {
-			proc = serviceNameFor(p)
-			if proc == "" {
-				proc = "-"
-			}
-		}
-		entries = append(entries, portEntry{Port: p, Command: proc, PID: pid, Addr: addr})
-	}
-	return entries, nil
+	return parseWindowsNetstat(string(out), windowsTaskMap(), dockerPortMap()), nil
 }
 
 func collectPIDsForPort(port string) []string {
@@ -100,6 +50,7 @@ func isPIDAliveWindows(pid string) bool {
 		return false
 	}
 	r := csv.NewReader(strings.NewReader(string(out)))
+	r.FieldsPerRecord = -1
 	rows, err := r.ReadAll()
 	if err != nil {
 		return false
@@ -115,16 +66,24 @@ func isPIDAliveWindows(pid string) bool {
 func killPIDs(pids []string) int {
 	c := ui.Colors()
 	killed := 0
+	graceful := make(map[string]bool)
 	for _, pid := range pids {
 		if err := exec.Command("taskkill", "/PID", pid, "/T").Run(); err == nil {
+			graceful[pid] = true
 			killed++
 		}
 	}
-	time.Sleep(1 * time.Second)
+	if len(graceful) > 0 {
+		time.Sleep(1 * time.Second)
+	}
 	for _, pid := range pids {
 		if isPIDAliveWindows(pid) {
-			fmt.Printf("  %sWARN%s  PID %s did not exit, forcing termination...\n", c.Yellow, c.Reset, pid)
-			_ = exec.Command("taskkill", "/F", "/PID", pid, "/T").Run()
+			if graceful[pid] {
+				fmt.Printf("  %sWARN%s  PID %s did not exit, forcing termination...\n", c.Yellow, c.Reset, pid)
+			}
+			if err := exec.Command("taskkill", "/F", "/PID", pid, "/T").Run(); err == nil && !graceful[pid] {
+				killed++
+			}
 		}
 	}
 	return killed

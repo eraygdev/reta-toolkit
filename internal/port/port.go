@@ -1,7 +1,6 @@
 package port
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
@@ -91,16 +90,9 @@ func dockerAvailable() bool {
 	return exec.Command("docker", "info").Run() == nil
 }
 
-func dockerPortMap() map[string]string {
+func parseDockerPortMappings(raw string) map[string]string {
 	outMap := make(map[string]string)
-	if !dockerAvailable() {
-		return outMap
-	}
-	out, err := exec.Command("docker", "ps", "--format", "{{.Names}}|{{.Ports}}").Output()
-	if err != nil {
-		return outMap
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for _, line := range strings.Split(strings.TrimSpace(raw), "\n") {
 		if line == "" {
 			continue
 		}
@@ -110,6 +102,9 @@ func dockerPortMap() map[string]string {
 		}
 		for _, mapping := range strings.Split(portStr, ",") {
 			m := strings.TrimSpace(mapping)
+			if strings.HasSuffix(strings.ToLower(m), "/udp") {
+				continue
+			}
 			arrowIdx := strings.Index(m, "->")
 			if arrowIdx <= 0 {
 				continue
@@ -125,6 +120,17 @@ func dockerPortMap() map[string]string {
 		}
 	}
 	return outMap
+}
+
+func dockerPortMap() map[string]string {
+	if !dockerAvailable() {
+		return make(map[string]string)
+	}
+	out, err := exec.Command("docker", "ps", "--format", "{{.Names}}|{{.Ports}}").Output()
+	if err != nil {
+		return make(map[string]string)
+	}
+	return parseDockerPortMappings(string(out))
 }
 
 func formatEntry(e portEntry) string {
@@ -262,11 +268,7 @@ func cmdList(args []string) int {
 }
 
 func confirmYes(prompt string) bool {
-	fmt.Print(prompt)
-	reader := bufio.NewReader(os.Stdin)
-	ans, _ := reader.ReadString('\n')
-	ans = strings.ToLower(strings.TrimSpace(ans))
-	return ans == "y" || ans == "yes"
+	return ui.ConfirmYes(os.Stdout, prompt)
 }
 
 func cmdKillByPort(port string) int {
@@ -362,8 +364,7 @@ func cmdKillInteractive() int {
 	fmt.Println("")
 
 	fmt.Print("Select (index/port, space or comma separated, q to quit): ")
-	reader := bufio.NewReader(os.Stdin)
-	choice, _ := reader.ReadString('\n')
+	choice, _ := ui.ReadLine()
 	choice = strings.TrimSpace(choice)
 	if choice == "" || choice == "q" {
 		return 0
@@ -371,6 +372,10 @@ func cmdKillInteractive() int {
 
 	tokens := strings.Fields(strings.ReplaceAll(choice, ",", " "))
 	var dockerNames, pids, report, risky []string
+	seenPorts := make(map[string]bool)
+	seenDocker := make(map[string]bool)
+	seenPIDs := make(map[string]bool)
+	seenRisky := make(map[string]bool)
 	for _, tok := range tokens {
 		var selected *portEntry
 		if idx, err := strconv.Atoi(tok); err == nil && idx >= 1 && idx <= len(ordered) {
@@ -388,17 +393,28 @@ func cmdKillInteractive() int {
 			fmt.Printf("  %sWARN%s  Not found: %s\n", c.Yellow, c.Reset, tok)
 			continue
 		}
+		if seenPorts[selected.Port] {
+			continue
+		}
+		seenPorts[selected.Port] = true
 
 		if selected.PID == "docker" {
-			dockerNames = append(dockerNames, selected.Command)
+			if !seenDocker[selected.Command] {
+				seenDocker[selected.Command] = true
+				dockerNames = append(dockerNames, selected.Command)
+			}
 			report = append(report, fmt.Sprintf("port %s -> docker container %s", selected.Port, selected.Command))
 		} else if selected.PID == "" || selected.PID == "-" {
 			report = append(report, fmt.Sprintf("port %s -> no PID visible (elevated privileges may be needed)", selected.Port))
 		} else {
-			pids = append(pids, selected.PID)
+			if !seenPIDs[selected.PID] {
+				seenPIDs[selected.PID] = true
+				pids = append(pids, selected.PID)
+			}
 			report = append(report, fmt.Sprintf("port %s -> PID %s (%s)", selected.Port, selected.PID, selected.Command))
 		}
-		if portClass(selected.Port, selected.PID) == "system" {
+		if portClass(selected.Port, selected.PID) == "system" && !seenRisky[selected.Port] {
+			seenRisky[selected.Port] = true
 			risky = append(risky, selected.Port)
 		}
 	}

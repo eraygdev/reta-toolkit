@@ -4,9 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/eraygdev/reta-toolkit/internal/testutil"
 )
 
 func TestRunHelpAndUnknownOption(t *testing.T) {
+	testutil.SilenceStdio(t)
 	t.Setenv("NO_COLOR", "1")
 	if code := Run([]string{"--help"}); code != 0 {
 		t.Fatalf("Run(--help) = %d, want 0", code)
