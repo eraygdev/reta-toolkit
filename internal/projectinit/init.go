@@ -12,6 +12,7 @@ import (
 	reta "github.com/eraygdev/reta-toolkit"
 	"github.com/eraygdev/reta-toolkit/internal/adopt"
 	"github.com/eraygdev/reta-toolkit/internal/cli"
+	"github.com/eraygdev/reta-toolkit/internal/config"
 	"github.com/eraygdev/reta-toolkit/internal/retasign"
 	"github.com/eraygdev/reta-toolkit/internal/search"
 	"github.com/eraygdev/reta-toolkit/internal/ui"
@@ -23,6 +24,10 @@ func printHelp() {
 	fmt.Println("")
 	fmt.Println("  DIR          Target directory (default: current directory)")
 	fmt.Println("  --convert    Convert existing Makefile to reta template without prompting")
+	fmt.Println("")
+	fmt.Println("Agent file settings (via 'reta config'):")
+	fmt.Println("  reta config agents-file <name>       Rename file (default: AGENTS.md; \"\" disables)")
+	fmt.Println("  reta config agents-template <path>   Fill file from a local prompt file")
 }
 
 func isInteractive() bool {
@@ -144,6 +149,39 @@ func Run(args []string) error {
 		}
 	}
 
+	agentsFile := config.AgentsFile()
+	agentsTemplate := config.AgentsTemplate()
+	if agentsFile != "" {
+		agentsDst := filepath.Join(targetDir, filepath.FromSlash(agentsFile))
+		if fileExists(agentsDst) {
+			fmt.Printf("  skip  %s (exists)\n", agentsFile)
+			skipped++
+		} else {
+			if err := os.MkdirAll(filepath.Dir(agentsDst), 0o755); err != nil {
+				return cli.Wrap(1, err, "creating directory for %s", agentsDst)
+			}
+			var content []byte
+			note := "(empty)"
+			if agentsTemplate != "" {
+				tplPath := config.ExpandPath(agentsTemplate)
+				if data, readErr := os.ReadFile(tplPath); readErr == nil {
+					content = data
+					note = "(from template)"
+				} else {
+					fmt.Printf("  warn  %s (template not found: %s; created empty)\n", agentsFile, tplPath)
+					note = ""
+				}
+			}
+			if err := os.WriteFile(agentsDst, content, 0o644); err != nil {
+				return cli.Wrap(1, err, "writing %s", agentsDst)
+			}
+			if note != "" {
+				fmt.Printf("  ok    %s %s\n", agentsFile, note)
+			}
+			copied++
+		}
+	}
+
 	signPath := filepath.Join(targetDir, retasign.SignFilename)
 	if fileExists(signPath) {
 		fmt.Printf("  skip  %s (exists)\n", retasign.SignFilename)
@@ -168,6 +206,9 @@ func Run(args []string) error {
 	var next []string
 	if fileExists(filepath.Join(targetDir, ".env.example")) && !fileExists(filepath.Join(targetDir, ".env")) {
 		next = append(next, "reta init-env      Generate .env from .env.example")
+	}
+	if agentsFile != "" && agentsTemplate == "" {
+		next = append(next, fmt.Sprintf("reta config agents-template <file>  Auto-fill %s on init", agentsFile))
 	}
 	if !fileExists(filepath.Join(targetDir, ".git")) {
 		next = append(next, "git init           Initialize a git repository")

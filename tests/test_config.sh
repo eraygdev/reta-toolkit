@@ -75,9 +75,35 @@ test_config_search_depth_setting() {
     assert_exit_code 2 env HOME="$PWD/fakehome" "$RETA_BIN" config search-depth abc
 }
 
+test_config_agents_settings() {
+    mkdir -p fakehome
+    local out
+    out=$(NO_COLOR=1 HOME="$PWD/fakehome" "$RETA_BIN" config agents-file)
+    assert_eq "agents-file=AGENTS.md" "$out"
+
+    HOME="$PWD/fakehome" "$RETA_BIN" config agents-file CLAUDE.md >/dev/null
+    out=$(NO_COLOR=1 HOME="$PWD/fakehome" "$RETA_BIN" config agents-file)
+    assert_eq "agents-file=CLAUDE.md" "$out"
+
+    HOME="$PWD/fakehome" "$RETA_BIN" config agents-file "" >/dev/null
+    out=$(NO_COLOR=1 HOME="$PWD/fakehome" "$RETA_BIN" config agents-file)
+    assert_contains "$out" "agents-file="
+    assert_contains "$out" "disabled"
+
+    echo "# Prompt" > prompt.md
+    HOME="$PWD/fakehome" "$RETA_BIN" config agents-template prompt.md >/dev/null
+    out=$(NO_COLOR=1 HOME="$PWD/fakehome" "$RETA_BIN" config agents-template)
+    assert_contains "$out" "agents-template=$PWD/prompt.md"
+
+    HOME="$PWD/fakehome" "$RETA_BIN" config agents-template "" >/dev/null
+    out=$(NO_COLOR=1 HOME="$PWD/fakehome" "$RETA_BIN" config agents-template)
+    assert_contains "$out" "empty"
+}
+
 run_test "reta config reads and updates hints"         test_config_defaults_and_set_hints
 run_test "reta config reads and updates learn mode"    test_config_learn_mode_toggle
 run_test "reta config manages search-depth"            test_config_search_depth_setting
+run_test "reta config manages agents-file & template"  test_config_agents_settings
 run_test "reta config --reset restores defaults"       test_config_reset_restores_defaults
 run_test "reta config rejects unknown key/value"       test_config_rejects_unknown_key_and_invalid_value
 run_test "reta config hints off suppresses Next steps" test_config_hints_off_suppresses_next_steps

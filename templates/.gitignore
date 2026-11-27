@@ -73,12 +73,11 @@ desktop.ini
 # *.wav
 
 # Temp export script and Makefile (personal use for AI context)
-export.py
 project_export.md
 project_export.txt
 exports/
-/Makefile
 /Makefile.bak
+/AGENTS.md
 
 # Logs
 *.log

@@ -77,7 +77,7 @@ var hiddenDirs = map[string]bool{
 
 var summaryDirs = map[string]bool{
 	"data": true, "datasets": true, "raw": true, "processed": true, "models": true, "checkpoints": true,
-	"weights": true, "assets": true, "media": true, "static": true, "backups": true, "exports": true,
+	"weights": true, "assets": true, "media": true, "backups": true, "exports": true,
 	"reports": true, "logs": true, "notebooks": true, "mlruns": true, "mlartifacts": true,
 	"faster-whisper-tiny": true, "piper-data": true, "tmp": true, "temp": true,
 }

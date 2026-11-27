@@ -48,7 +48,7 @@ try {
     try {
         & $BinPath init . | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "reta init failed" }
-        foreach ($f in @(".env.example", ".gitignore", "Makefile", "README.md", ".retasign")) {
+        foreach ($f in @(".env.example", ".gitignore", "Makefile", "README.md", ".retasign", "AGENTS.md")) {
             if (-not (Test-Path (Join-Path $WorkDir $f))) { throw "Missing scaffolded file: $f" }
         }
 

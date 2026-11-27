@@ -37,7 +37,7 @@ func TestConfigLoadSaveAndValidation(t *testing.T) {
 	home := setTempHome(t)
 
 	cfg := Load()
-	if cfg["hints"] != "on" || cfg["learn"] != "off" || cfg["search-depth"] != "4" {
+	if cfg["hints"] != "on" || cfg["learn"] != "off" || cfg["search-depth"] != "4" || cfg["agents-file"] != "AGENTS.md" || cfg["agents-template"] != "" {
 		t.Fatalf("unexpected defaults: %+v", cfg)
 	}
 
@@ -85,5 +85,46 @@ func TestConfigIgnoresCorruptLinesAndCRLF(t *testing.T) {
 	}
 	if cfg["search-depth"] != "4" {
 		t.Fatalf("invalid search-depth=0 must fallback to 4, got %q", cfg["search-depth"])
+	}
+}
+
+func TestConfigAgentsFileAndTemplate(t *testing.T) {
+	testutil.SilenceStdio(t)
+	home := setTempHome(t)
+
+	if got := AgentsFile(); got != "AGENTS.md" {
+		t.Fatalf("default AgentsFile() = %q, want AGENTS.md", got)
+	}
+	if got := AgentsTemplate(); got != "" {
+		t.Fatalf("default AgentsTemplate() = %q, want empty", got)
+	}
+
+	assertExitCode(t, Run([]string{"agents-file", "CLAUDE.md"}), 0)
+	if got := AgentsFile(); got != "CLAUDE.md" {
+		t.Fatalf("AgentsFile() = %q, want CLAUDE.md", got)
+	}
+
+	assertExitCode(t, Run([]string{"agents-file", "../escape.md"}), 2)
+	assertExitCode(t, Run([]string{"agents-file", filepath.Join(home, "abs.md")}), 2)
+
+	assertExitCode(t, Run([]string{"agents-file", ""}), 0)
+	if got := AgentsFile(); got != "" {
+		t.Fatalf("expected empty AgentsFile() when disabled, got %q", got)
+	}
+
+	tplDir := t.TempDir()
+	tplPath := filepath.Join(tplDir, "project.md")
+	if err := os.WriteFile(tplPath, []byte("# Prompt\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assertExitCode(t, Run([]string{"agents-template", tplDir}), 2)
+	assertExitCode(t, Run([]string{"agents-template", tplPath}), 0)
+	if got := AgentsTemplate(); got != tplPath {
+		t.Fatalf("AgentsTemplate() = %q, want %q", got, tplPath)
+	}
+
+	assertExitCode(t, Run([]string{"agents-template", ""}), 0)
+	if got := AgentsTemplate(); got != "" {
+		t.Fatalf("expected cleared AgentsTemplate(), got %q", got)
 	}
 }

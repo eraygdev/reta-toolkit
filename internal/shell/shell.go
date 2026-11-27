@@ -170,11 +170,13 @@ func RunCompletion(args []string) error {
             ;;
         config)
             if [ "$COMP_CWORD" -eq 2 ]; then
-                COMPREPLY=($(compgen -W "hints learn search-depth --reset -h --help" -- "$cur"))
+                COMPREPLY=($(compgen -W "agents-file agents-template hints learn search-depth --reset -h --help" -- "$cur"))
             elif [ "$COMP_CWORD" -eq 3 ]; then
                 case "${COMP_WORDS[2]}" in
                     hints|learn) COMPREPLY=($(compgen -W "on off" -- "$cur")) ;;
                     search-depth) COMPREPLY=($(compgen -W "4" -- "$cur")) ;;
+                    agents-file) COMPREPLY=($(compgen -W "AGENTS.md" -- "$cur")) ;;
+                    agents-template) COMPREPLY=($(compgen -f -- "$cur")) ;;
                 esac
             fi
             ;;
@@ -210,7 +212,7 @@ _reta() {
                 help) _describe 'command' cmds ;;
                 init) _arguments '--convert[convert Makefile]' '1:directory:_directories' ;;
                 env) _values 'env' check list diff sync --show -n --dry-run --env --example ;;
-                config) _values 'config' hints learn search-depth --reset ;;
+                config) _values 'config' agents-file agents-template hints learn search-depth --reset ;;
                 port) _values 'port' list kill docker ps help ;;
                 hook) _values 'hook' install remove status ;;
                 completion|shell-init) _values 'shell' bash zsh powershell ;;
