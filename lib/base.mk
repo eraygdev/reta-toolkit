@@ -20,6 +20,7 @@ endif
 
 # === Help ===
 
+# cmd: make help (default)
 help:  ## Show all targets (base + project)
 	@echo "Available targets:"
 	@awk -v dir="$(DIR)" 'BEGIN {FS = ":([^=][^#]*)?## "; pending = ""} \
@@ -67,6 +68,7 @@ help:  ## Show all targets (base + project)
 	  printf "%s\n" "$$proj"; \
 	fi
 
+# cmd: make help-base
 help-base:  ## Show only base targets
 	@echo "Base targets:"
 	@awk -v dir="$(DIR)" 'BEGIN {FS = ":([^=][^#]*)?## "; pending = ""} \
@@ -88,6 +90,7 @@ help-base:  ## Show only base targets
 	    printf "  \033[36m%-18s\033[0m %s\n", $$1, desc \
 	  }' $(HOME)/.reta/lib/base.mk
 
+# cmd: make help-project
 help-project:  ## Show only project-specific targets
 	@echo "Project-specific targets:"
 	@awk 'BEGIN {FS = ":([^=][^#]*)?## "; pending = ""} \
@@ -109,6 +112,7 @@ help-project:  ## Show only project-specific targets
 
 # === Docker ===
 
+# cmd: docker compose up -d
 up:  ## Start the stack
 	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
 		echo "Error: No compose file found. This project is not Docker-based."; \
@@ -117,6 +121,7 @@ up:  ## Start the stack
 	$(call SHOW_CMD,$(COMPOSE) up -d)
 	@$(COMPOSE) up -d
 
+# cmd: docker compose down
 down:  ## Stop the stack
 	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
 		echo "Error: No compose file found. This project is not Docker-based."; \
@@ -125,6 +130,7 @@ down:  ## Stop the stack
 	$(call SHOW_CMD,$(COMPOSE) down)
 	@$(COMPOSE) down
 
+# cmd: docker compose restart
 restart:  ## Restart services
 	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
 		echo "Error: No compose file found. This project is not Docker-based."; \
@@ -133,6 +139,7 @@ restart:  ## Restart services
 	$(call SHOW_CMD,$(COMPOSE) restart)
 	@$(COMPOSE) restart
 
+# cmd: docker compose up -d --build --force-recreate
 rebuild:  ## Rebuild and restart (force-recreate)
 	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
 		echo "Error: No compose file found. This project is not Docker-based."; \
@@ -141,6 +148,7 @@ rebuild:  ## Rebuild and restart (force-recreate)
 	$(call SHOW_CMD,$(COMPOSE) up -d --build --force-recreate)
 	@$(COMPOSE) up -d --build --force-recreate
 
+# cmd: docker compose ps
 ps:  ## Show service status
 	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
 		echo "Error: No compose file found. This project is not Docker-based."; \
@@ -149,6 +157,7 @@ ps:  ## Show service status
 	$(call SHOW_CMD,$(COMPOSE) ps)
 	@$(COMPOSE) ps
 
+# cmd: docker compose exec $(SERVICE) sh
 sh:  ## Open shell in a container (make sh SERVICE=api)
 	@if [ ! -f docker-compose.yml ] && [ ! -f docker-compose.yaml ] && [ ! -f compose.yml ] && [ ! -f compose.yaml ]; then \
 		echo "Error: No compose file found. This project is not Docker-based."; \
@@ -166,14 +175,17 @@ sh:  ## Open shell in a container (make sh SERVICE=api)
 
 # === Logs ===
 
+# cmd: docker compose logs -f --tail 50
 logs:  ## Stream logs (this terminal)
 	$(call SHOW_CMD,$(COMPOSE) logs -f --tail 50)
 	@$(COMPOSE) logs -f --tail 50
 
+# cmd: docker compose logs --no-log-prefix -f --tail 50
 logs-all:  ## Stream logs from all services (no prefix)
 	$(call SHOW_CMD,$(COMPOSE) logs --no-log-prefix -f --tail 50)
 	@$(COMPOSE) logs --no-log-prefix -f --tail 50
 
+# cmd: open terminal tab running docker compose logs -f --tail 50
 logs-t:  ## Stream logs in a new terminal tab
 	@if [ "$$(uname -s)" = "Darwin" ]; then \
 		osascript -e 'tell application "Terminal" to do script "cd \"$(CURDIR)\" && $(COMPOSE) logs -f --tail 50"' >/dev/null 2>&1 || \
@@ -185,14 +197,17 @@ logs-t:  ## Stream logs in a new terminal tab
 		(echo "Warning: could not open new tab, falling back to 'make logs'"; cd "$(CURDIR)" && $(COMPOSE) logs -f --tail 50); \
 	fi
 
+# cmd: docker compose logs -f --tail 0 | grep -iE "error|fatal|exception|traceback"
 logs-errors:  ## Stream only errors (live filter)
 	@$(COMPOSE) logs -f --tail 0 2>&1 | grep --line-buffered -iE "error|fatal|exception|traceback"
 
+# cmd: docker compose logs -f --tail 0 | grep -iE "warn"
 logs-warn:  ## Stream only warnings (live filter)
 	@$(COMPOSE) logs -f --tail 0 2>&1 | grep --line-buffered -iE "warn"
 
 # === Clean ===
 
+# cmd: delete __pycache__, *.pyc, .pytest_cache, coverage
 clean:  ## Remove Python caches
 	@find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	@find . -type f -name "*.pyc" -delete 2>/dev/null || true
@@ -200,6 +215,7 @@ clean:  ## Remove Python caches
 	@rm -rf .coverage coverage.xml htmlcov 2>/dev/null || true
 	@echo "Cache cleaned."
 
+# cmd: docker builder prune -f && docker image prune -f && docker container prune -f
 clean-docker:  ## Safe docker prune (volumes preserved)
 	$(call SHOW_CMD,docker builder prune -f && docker image prune -f && docker container prune -f)
 	@docker builder prune -f
@@ -209,6 +225,7 @@ clean-docker:  ## Safe docker prune (volumes preserved)
 
 # === Export ===
 
+# cmd: reta export --dir $(DIR)
 export:  ## Export source for AI context (DIR=$(DIR))
 	@if command -v reta >/dev/null 2>&1 && reta export --help >/dev/null 2>&1; then \
 		EXPORTER="reta export"; \
@@ -229,6 +246,7 @@ export:  ## Export source for AI context (DIR=$(DIR))
 		esac; \
 	fi
 
+# cmd: reta export --dir $(DIR) --clean
 clean-export:  ## Remove old export and regenerate (DIR=$(DIR))
 	@if command -v reta >/dev/null 2>&1 && reta export --help >/dev/null 2>&1; then \
 		EXPORTER="reta export"; \
@@ -249,6 +267,7 @@ clean-export:  ## Remove old export and regenerate (DIR=$(DIR))
 		esac; \
 	fi
 
+# cmd: reta export --dir $(DIR) --clean-exports
 clean-exports:  ## Delete all files inside exports/ (with confirmation)
 	@if command -v reta >/dev/null 2>&1 && reta export --help >/dev/null 2>&1; then \
 		reta export --dir "$(DIR)" --clean-exports; \
@@ -261,6 +280,7 @@ clean-exports:  ## Delete all files inside exports/ (with confirmation)
 
 # === Git ===
 
+# cmd: git fetch --prune && git pull --rebase (deletes gone branches)
 git-sync:  ## Fetch, rebase, delete gone branches
 	$(call SHOW_CMD,git fetch --prune && git pull --rebase)
 	@git fetch --prune
@@ -269,12 +289,14 @@ git-sync:  ## Fetch, rebase, delete gone branches
 	 git branch -vv | awk '/: gone\]/ { if ($$1 == "*" || $$1 == "+") next; print $$1 }' | xargs git branch -D 2>/dev/null || true
 	@echo "Sync complete."
 
+# cmd: git status -sb
 git-status:  ## Short git status
 	$(call SHOW_CMD,git status -sb)
 	@git status -sb
 
 # === Security ===
 
+# cmd: reta check-secrets
 check-secrets:  ## Scan repo for tracked .env files and leaked secrets
 	$(call SHOW_CMD,reta check-secrets)
 	@if command -v reta >/dev/null 2>&1 && reta check-secrets --help >/dev/null 2>&1; then \

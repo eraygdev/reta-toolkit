@@ -194,7 +194,7 @@ reta-toolkit/
 ├── assets.go               # Embedded VERSION, templates/, and lib/base.mk
 ├── cmd/reta/               # CLI entrypoint and command registry
 ├── internal/
-│   ├── adopt/              # Makefile parser and converter
+│   ├── adopt/              # Makefile parser and converter (dynamic target matrix)
 │   ├── clean/              # Cross-platform system cleanup
 │   ├── cli/                # Flag parser and exit-code error helpers
 │   ├── config/             # Persistent settings manager

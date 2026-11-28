@@ -20,7 +20,6 @@ const HIBlock = "hi:  ## Say hello\n\t@echo \"Hi👋\"\n"
 const fallbackHeader = `# Project Makefile (powered by ~/.reta/lib/base.mk)
 #
 # Rules & usage:
-#   - Inherited targets: ` + "`up`" + `, ` + "`down`" + `, ` + "`logs`" + `, ` + "`clean`" + `, ` + "`export`" + `, ` + "`git-sync`" + `, ...
 #   - Do NOT define ` + "`help:`" + ` — ` + "`base.mk`" + ` generates a combined ` + "`help`" + ` for all targets.
 #   - Override any other base target (e.g. ` + "`clean`" + `, ` + "`up`" + `) by defining it below
 #     ` + "`include $(RETA_BASE)`" + `. (Converted Makefiles comment out colliding rules
@@ -48,7 +47,8 @@ var (
 	condStartRE        = regexp.MustCompile(`^(?:ifeq|ifneq|ifdef|ifndef)\b`)
 	condEndRE          = regexp.MustCompile(`^endif\b`)
 	defineStartRE      = regexp.MustCompile(`^(?:override\s+)?define\b`)
-	baseMatrixRE       = regexp.MustCompile(`^([a-zA-Z0-9_.-]+):(?:[^=][^#]*)?## `)
+	baseTargetDocRE    = regexp.MustCompile(`^([a-zA-Z0-9_.-]+):(?:[^=][^#]*)?##\s*(.*)$`)
+	baseCmdRE          = regexp.MustCompile(`^#\s*cmd:\s*(.+)$`)
 	halfDecoratedRE    = regexp.MustCompile(`^(?:===+|---|###|\*\*\*)\s*(.+)$`)
 )
 
@@ -101,42 +101,69 @@ func matchTargetLine(line string) (targetsPart, rest string, ok bool) {
 }
 
 func GenerateBaseMatrix(baseMK string) string {
-	var targets []string
+	type targetDoc struct {
+		name   string
+		desc   string
+		detail string
+	}
+	var targets []targetDoc
+	maxNameLen := 0
+	maxDescLen := 0
+	pendingCmd := ""
+
 	for _, raw := range strings.Split(strings.ReplaceAll(baseMK, "\r\n", "\n"), "\n") {
-		if m := baseMatrixRE.FindStringSubmatch(raw); len(m) == 2 {
+		line := strings.TrimSpace(raw)
+		if m := baseCmdRE.FindStringSubmatch(line); len(m) == 2 {
+			pendingCmd = strings.TrimSpace(m[1])
+			continue
+		}
+		if m := baseTargetDocRE.FindStringSubmatch(line); len(m) == 3 {
 			tname := m[1]
-			if tname != "" && !strings.HasPrefix(tname, ".") && tname != "help" {
-				targets = append(targets, tname)
+			desc := strings.TrimSpace(m[2])
+			if tname != "" && !strings.HasPrefix(tname, ".") {
+				targets = append(targets, targetDoc{
+					name:   tname,
+					desc:   desc,
+					detail: pendingCmd,
+				})
+				if len(tname) > maxNameLen {
+					maxNameLen = len(tname)
+				}
+				if len(desc) > maxDescLen {
+					maxDescLen = len(desc)
+				}
 			}
+			pendingCmd = ""
+			continue
+		}
+		if line != "" && !strings.HasPrefix(line, "#") {
+			pendingCmd = ""
 		}
 	}
 	if len(targets) == 0 {
 		return ""
 	}
-	const cols = 5
-	maxLen := 0
-	for _, t := range targets {
-		if len(t) > maxLen {
-			maxLen = len(t)
-		}
-	}
-	maxLen += 4
 
-	lines := []string{"# Inherited base targets (matrix view):"}
-	var row []string
+	lines := []string{"# Inherited base targets (from ~/.reta/lib/base.mk):"}
 	for _, t := range targets {
-		pad := maxLen - len(t)
-		if pad < 0 {
-			pad = 0
+		namePad := maxNameLen - len(t.name) + 2
+		if namePad < 2 {
+			namePad = 2
 		}
-		row = append(row, t+strings.Repeat(" ", pad))
-		if len(row) == cols {
-			lines = append(lines, "#   "+strings.TrimRight(strings.Join(row, ""), " "))
-			row = nil
+		if t.detail != "" {
+			descPad := maxDescLen - len(t.desc) + 2
+			if descPad < 2 {
+				descPad = 2
+			}
+			lines = append(lines, fmt.Sprintf("#   %s%s%s%s-> %s",
+				t.name, strings.Repeat(" ", namePad),
+				t.desc, strings.Repeat(" ", descPad),
+				t.detail))
+		} else {
+			lines = append(lines, fmt.Sprintf("#   %s%s%s",
+				t.name, strings.Repeat(" ", namePad),
+				t.desc))
 		}
-	}
-	if len(row) > 0 {
-		lines = append(lines, "#   "+strings.TrimRight(strings.Join(row, ""), " "))
 	}
 	return strings.Join(lines, "\n")
 }

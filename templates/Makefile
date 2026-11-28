@@ -1,7 +1,6 @@
 # Project Makefile (powered by ~/.reta/lib/base.mk)
 #
 # Rules & usage:
-#   - Inherited targets: `up`, `down`, `logs`, `clean`, `export`, `git-sync`, ...
 #   - Do NOT define `help:` — `base.mk` generates a combined `help` for all targets.
 #   - Override any other base target (e.g. `clean`, `up`) by defining it below
 #     `include $(RETA_BASE)`. (Converted Makefiles comment out colliding rules

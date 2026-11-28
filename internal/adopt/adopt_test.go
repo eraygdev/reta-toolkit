@@ -2,11 +2,34 @@ package adopt
 
 import (
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
 	reta "github.com/eraygdev/reta-toolkit"
 )
+
+func TestGenerateBaseMatrixDocumentsTargets(t *testing.T) {
+	doc := GenerateBaseMatrix(reta.BaseMK)
+	if !strings.Contains(doc, "# Inherited base targets (from ~/.reta/lib/base.mk):") {
+		t.Fatalf("missing header in:\n%s", doc)
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?m)^#\s+up\s+Start the stack\s+-> docker compose up -d$`),
+		regexp.MustCompile(`(?m)^#\s+down\s+Stop the stack\s+-> docker compose down$`),
+		regexp.MustCompile(`(?m)^#\s+logs\s+Stream logs \(this terminal\)\s+-> docker compose logs -f --tail 50$`),
+		regexp.MustCompile(`(?m)^#\s+clean\s+Remove Python caches\s+-> delete __pycache__, \*\.pyc, \.pytest_cache, coverage$`),
+		regexp.MustCompile(`(?m)^#\s+export\s+Export source for AI context \(DIR=\$\(DIR\)\)\s+-> reta export --dir \$\(DIR\)$`),
+		regexp.MustCompile(`(?m)^#\s+clean-export\s+Remove old export and regenerate \(DIR=\$\(DIR\)\)\s+-> reta export --dir \$\(DIR\) --clean$`),
+		regexp.MustCompile(`(?m)^#\s+clean-exports\s+Delete all files inside exports/ \(with confirmation\)\s+-> reta export --dir \$\(DIR\) --clean-exports$`),
+		regexp.MustCompile(`(?m)^#\s+check-secrets\s+Scan repo for tracked .env files and leaked secrets\s+-> reta check-secrets$`),
+	}
+	for _, p := range patterns {
+		if !p.MatchString(doc) {
+			t.Fatalf("GenerateBaseMatrix output missing pattern %s:\n%s", p, doc)
+		}
+	}
+}
 
 func TestAlreadyUsesReta(t *testing.T) {
 	if !AlreadyUsesReta("include $(RETA_BASE)\n") {
